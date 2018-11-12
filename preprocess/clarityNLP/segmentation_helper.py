@@ -23,13 +23,92 @@ TRACE = False
 
 MODULE_NAME = 'segmentation_helper.py'
 
-# regex for locating an anonymized items [** ... **]
+FIRST_NAME_TOKEN = 'firstnametok'
+LAST_NAME_TOKEN = 'lastnametok'
+DOCTOR_FIRST_NAME_TOKEN = 'doctorfirstnametok'
+DOCTOR_LAST_NAME_TOKEN = 'doctorlastnametok'
+NAME_TOKEN = 'nametok'
+NAME_PREFIX_TOKEN = 'nameprefixtok'
+ADDRESS_TOKEN = 'addresstok'
+LOCATION_TOKEN = 'locationtok'
+HOSPITAL_TOKEN = 'hospitaltok'
+PO_BOX_TOKEN = 'poboxtok'
+STATE_TOKEN = 'statenametok'
+COUNTRY_TOKEN = 'countrynametok'
+COMPANY_TOKEN = 'companynametok'
+TELEPHONE_NUMBER_TOKEN = 'telephonenumbertok'
+PAGER_NUMBER_TOKEN = 'pagernumbertok'
+SSN_TOKEN = 'ssntok'
+MEDICAL_RECORD_NUMBER_TOKEN = 'medicalrecordnumbertok'
+UNIT_NUMBER_TOKEN = 'unitnumbertok'
+AGE_OVER_90_TOKEN = 'ageover90tok'
+EMAIL_ADDRESS_TOKEN = 'emailaddresstok'
+URL_TOKEN = 'urladdresstok'
+HOLYDAY_TOKEN = 'holydaynametok'
+JOB_NUMBER_TOKEN = 'jobnumbertok'
+MD_NUMBER_TOKEN = 'mdnumbertok'
+DATE_RANGE_TOKEN = 'daterangetok'
+NUMERIC_IDENTIFIER_TOKEN = 'numericidentifiertok'
+DATE_LITERAL_TOKEN = 'datetok'
+UNIVERSITY_TOKEN = 'universitytok'
+DICTATOR_INFO_TOKEN = 'dictatorinfotok'
+CC_CONTACT_INFO_TOKEN = 'cccontactinfotok'
+CLIP_NUMBER_TOKEN = 'clipnumbertok'
+SERIAL_NUMBER_TOKEN = 'serialnumbertok'
+ATTENDING_INFO_TOKEN = 'attendinginfotok'
+PROVIDER_NUMBER_TOKEN = 'providernumbertok'
+
+# regex for locating a PHI [** ... **]
 
 str_anon_start = r'(?P<anon>\[\*\*('
-str_anon_date = r'(?P<anon_date>[0-9]{1,4}-[0-9]{1,2}(-[0-9]{1,2})?)'
+#str_anon_date = r'(?P<anon_date>([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})|([0-9]{4})|([0-9]{4}-[0-9]{1,2})|([0-9]{1,2}-[0-9]{1,2}))'
+str_anon_date = r'(?P<anon_date>([0-9/\-]+)|([0-9]+))'
+str_sep1 = r'|((('
+str_anon_first_name = r'(?P<anon_first_name>(Known firstname)|(Female First Name)|(Male First Name)|(First Name))'
+str_anon_last_name = r'(?P<anon_last_name>(Known lastname)|(Last Name))'
+str_anon_doctor_first_name = r'(?P<anon_doctor_first_name>(Doctor First Name))'
+str_anon_doctor_last_name = r'(?P<anon_doctor_last_name>(Doctor Last Name))'
+str_anon_name = r'(?P<anon_name>(Name)|(Name Initial)|(Initials)|(Initial))'
+str_anon_name_prefix = r'(?P<anon_name_prefix>(Name Prefix))'
+str_anon_address = r'(?P<anon_address>(Street Address)|(Apartment Address))'
+str_anon_university = r'(?P<anon_university>(Location \(Universities\))|(University/College))' #keep before location
+str_anon_location = r'(?P<anon_location>(Location))'
+str_anon_hospital = r'(?P<anon_hospital>(Hospital)|(Wardname)|(Hospital Unit Name)|(Hospital Ward Name))'
+str_anon_po_box = r'(?P<anon_po_box>(PO BOX)|(PO Box))'
+str_anon_state = r'(?P<anon_state>(State)|(State/Zipcode))'
+str_anon_country = r'(?P<anon_country>(Country))'
+str_anon_company = r'(?P<anon_company>(Company))'
+str_anon_telephone_number = r'(?P<anon_telephone_number>(Telephone/Fax))'
+str_anon_pager_number = r'(?P<anon_pager_number>(Pager number))'
+str_anon_social_security_number = r'(?P<anon_social_security_number>(Social Security Number))'
+str_anon_medical_record_number = r'(?P<anon_medical_record_number>(Medical Record Number))'
+str_anon_unit_number = r'(?P<anon_unit_number>(Unit Number))'
+str_anon_age_over_90 = r'(?P<anon_age_over_90>(Age over 90))'
+str_anon_email_address = r'(?P<anon_email_address>(E-mail address))'
+str_anon_url = r'(?P<anon_url>(URL))'
+str_anon_holiday = r'(?P<anon_holiday>(Holiday))'
+str_anon_job_number = r'(?P<anon_job_number>(Job Number))'
+str_anon_md_number = r'(?P<anon_md_number>(MD Number))'
+str_anon_date_range = r'(?P<anon_date_range>(Date range)|(Date Range))'
+str_anon_numeric_identifier = r'(?P<anon_numeric_identifier>(Numeric Identifier))'
+str_anon_date_literal = r'(?P<anon_date_literal>(Month)|(Month/Day)|(Month/Year)|(Year)|(Month/Day/Year)|(Year/Month/Day)|(Year/Month)|(Day Month)|(Month Day)|(Month Year)|(Month/Year 1)|(January)|(February)|(March)|(April)|(May)|(June)|(July)|(August)|(September)|(October)|(November)|(December))'
+str_anon_dictator_info = r'(?P<anon_dictator_info>(Dictator Info))'
+str_anon_cc_contact_info = r'(?P<anon_cc_contact_info>(CC Contact Info))'
+str_anon_clip_number = r'(?P<anon_clip_number>(Clip Number))'
+str_anon_serial_number = r'(?P<anon_serial_number>(Serial Number))'
+str_anon_attending_info = r'(?P<anon_attending_info>(Attending Info))'
+str_anon_provider_number = r'(?P<anon_provider_number>(Provider Number))'
 str_anon_default = r'(.*?)'
-str_anon_end = r')\*\*\])'
-str_anon = r'|'.join([str_anon_start, str_anon_date, str_anon_default, str_anon_end])
+str_anon_tokens = r'|'.join([str_anon_first_name, str_anon_last_name, str_anon_doctor_first_name, str_anon_doctor_last_name,
+										str_anon_name, str_anon_name_prefix, str_anon_address, str_anon_university, str_anon_location, str_anon_hospital,
+										str_anon_po_box, str_anon_state, str_anon_country, str_anon_company,
+										str_anon_telephone_number, str_anon_pager_number, str_anon_social_security_number, str_anon_medical_record_number,
+										str_anon_unit_number, str_anon_age_over_90, str_anon_email_address, str_anon_url, str_anon_holiday, str_anon_job_number,
+										str_anon_md_number, str_anon_date_range, str_anon_numeric_identifier, str_anon_date_literal, str_anon_dictator_info,
+										str_anon_cc_contact_info, str_anon_clip_number, str_anon_serial_number, str_anon_attending_info, str_anon_provider_number,
+										str_anon_default])
+str_anon_end = r')(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?)))\*\*\])'
+str_anon = r''.join([str_anon_start, str_anon_date, str_sep1, str_anon_tokens, str_anon_end])
 #regex_anon = re.compile(str_anon)
 
 # regex for locating a contrast agent expression
@@ -144,7 +223,7 @@ def disable_debug():
 
 
 ###############################################################################
-def find_size_meas_subs(report, sub_list, text):
+def find_size_meas_subs(report, subs, text):
 
 	json_string = run_size_measurement(report)
 	if '[]' == json_string:
@@ -163,7 +242,7 @@ def find_size_meas_subs(report, sub_list, text):
 		replacement = '{0}{1:03}'.format(text, counter)
 		new_report += chunk1 + replacement
 		prev_end = m.end
-		sub_list.append( (replacement, m.text) )
+		subs[replacement] = m.text
 		counter += 1
 	new_report += report[prev_end:]
 
@@ -203,7 +282,7 @@ def find_size_meas_subs(report, sub_list, text):
 def do_substitutions(report):
 
 	subs = {}
-	size_meas_subs = []
+	size_meas_subs = {}
 
 	token_counter = 0
 	anon_counter = 0
@@ -237,52 +316,122 @@ def do_substitutions(report):
 			abbrev_counter += 1
 			replacement = 'ABBREV{0}'.format(abbrev_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('vitals'):
 			vitals_counter += 1
 			replacement = 'VITALS{0}'.format(vitals_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		if mo.group('caps_header'):
 			header_counter += 1
 			replacement = 'HEADER{0}'.format(header_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('anon') and mo.group('anon_date'):
-			anon_counter += 1
-			replacement = 'ANONDATE{0}'.format(anon_date_counter)
-			subs[replacement] = mo.group('anon_date')
-			return replacement
+			#anon_counter += 1
+			#replacement = 'ANONDATE{0}'.format(anon_date_counter)
+			#subs[replacement] = mo.group('anon_date')
+			return mo.group('anon_date').replace('/', '').replace('-', '/')
+		elif mo.group('anon') and mo.group('anon_first_name'):
+			return FIRST_NAME_TOKEN
+		elif mo.group('anon') and mo.group('anon_last_name'):
+			return LAST_NAME_TOKEN
+		elif mo.group('anon') and mo.group('anon_doctor_first_name'):
+			return DOCTOR_FIRST_NAME_TOKEN
+		elif mo.group('anon') and mo.group('anon_doctor_last_name'):
+			return DOCTOR_LAST_NAME_TOKEN
+		elif mo.group('anon') and mo.group('anon_name'):
+			return NAME_TOKEN
+			#elif mo.group('anon') and mo.group('anon_id'):
+			#	return ' ANONID{0} '.format(mo.group('anon_id'))
+		elif mo.group('anon') and mo.group('anon_name_prefix'):
+			return NAME_PREFIX_TOKEN
+		elif mo.group('anon') and mo.group('anon_address'):
+			return ADDRESS_TOKEN
+		elif mo.group('anon') and mo.group('anon_university'):
+			return UNIVERSITY_TOKEN
+		elif mo.group('anon') and mo.group('anon_location'):
+			return LOCATION_TOKEN
+		elif mo.group('anon') and mo.group('anon_hospital'):
+			return HOSPITAL_TOKEN
+		elif mo.group('anon') and mo.group('anon_po_box'):
+			return PO_BOX_TOKEN
+		elif mo.group('anon') and mo.group('anon_state'):
+			return STATE_TOKEN
+		elif mo.group('anon') and mo.group('anon_country'):
+			return COUNTRY_TOKEN
+		elif mo.group('anon') and mo.group('anon_company'):
+			return COMPANY_TOKEN
+		elif mo.group('anon') and mo.group('anon_telephone_number'):
+			return TELEPHONE_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_pager_number'):
+			return PAGER_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_social_security_number'):
+			return SSN_TOKEN
+		elif mo.group('anon') and mo.group('anon_medical_record_number'):
+			return MEDICAL_RECORD_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_unit_number'):
+			return UNIT_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_age_over_90'):
+			return AGE_OVER_90_TOKEN
+		elif mo.group('anon') and mo.group('anon_email_address'):
+			return EMAIL_ADDRESS_TOKEN
+		elif mo.group('anon') and mo.group('anon_url'):
+			return URL_TOKEN
+		elif mo.group('anon') and mo.group('anon_holiday'):
+			return HOLYDAY_TOKEN
+		elif mo.group('anon') and mo.group('anon_job_number'):
+			return JOB_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_md_number'):
+			return MD_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_date_range'):
+			return DATE_RANGE_TOKEN
+		elif mo.group('anon') and mo.group('anon_numeric_identifier'):
+			return NUMERIC_IDENTIFIER_TOKEN
+		elif mo.group('anon') and mo.group('anon_date_literal'):
+			return DATE_LITERAL_TOKEN
+		elif mo.group('anon') and mo.group('anon_dictator_info'):
+			return DICTATOR_INFO_TOKEN
+		elif mo.group('anon') and mo.group('anon_cc_contact_info'):
+			return CC_CONTACT_INFO_TOKEN
+		elif mo.group('anon') and mo.group('anon_clip_number'):
+			return CLIP_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_serial_number'):
+			return SERIAL_NUMBER_TOKEN
+		elif mo.group('anon') and mo.group('anon_attending_info'):
+			return ATTENDING_INFO_TOKEN
+		elif mo.group('anon') and mo.group('anon_provider_number'):
+			return PROVIDER_NUMBER_TOKEN
 		elif mo.group('anon'):
 			anon_counter += 1
 			replacement = 'ANON{0}'.format(anon_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('contrast'):
 			contrast_counter += 1
 			replacement = 'CONTRAST{0}'.format(contrast_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('fov'):
 			fov_counter += 1
 			replacement = 'FOV{0}'.format(fov_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('prescription'):
 			prescription_counter += 1
 			replacement = 'PRESCRIPTION{0}'.format(prescription_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		elif mo.group('gender'):
 			gender_counter += 1
 			replacement = 'GENDER{0}'.format(gender_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 		else:
 			token_counter += 1
 			replacement = 'TOKEN{0}'.format(token_counter)
 			subs[replacement] = text
-			return replacement
+			return ' {0} '.format(replacement)
 
 	report = regex.sub(repl, report)
 	report = find_size_meas_subs(report, size_meas_subs, 'MEAS')
@@ -327,9 +476,9 @@ def undo_substitutions(sentence_list, subs, size_meas_subs):
 	regex = re.compile("({0})".format("|".join(map(re.escape, subs.keys()))), max_mem=(300 << 20))
 	
 	sentence_list = multiple_replace(sentence_list, regex)
-	sentence_list = replace_text(sentence_list, size_meas_subs)
+	sentence_list = list(replace_text(sentence_list, size_meas_subs))
 
-	yield sentence_list
+	return sentence_list
 
 ###############################################################################
 def erase_spans(report, span_list):
@@ -353,8 +502,6 @@ def erase_spans(report, span_list):
 
 ###############################################################################
 def cleanup_report(report):
-	"""
-	"""
 
 	# remove (Over) ... (Cont) inserts
 	spans = []
@@ -412,7 +559,7 @@ def fixup_sentences(sentence_list):
 	"""
 	Move punctuation from one sentence to another, if necessary.
 	"""
-
+	
 	num = len(sentence_list)
 	
 	i = 1
@@ -424,7 +571,7 @@ def fixup_sentences(sentence_list):
 			sentence_list[i-1] = sprev + ':'
 			sentence_list[i]   = s[1:].lstrip()
 		i += 1
-		yield sentence_list[i]
+	return sentence_list
 
 ###############################################################################
 def split_section_headers(sentence_list):

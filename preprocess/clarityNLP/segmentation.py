@@ -30,11 +30,12 @@ MODULE_NAME = 'segmentation.py'
 
 ###############################################################################
 
-def get_words(self, sentence_list, subs, size_meas_subs):
+def get_sentences(self, sentence_list, subs, size_meas_subs):
 	for sentence in self.nlp_words.pipe(sentence_list, n_threads=128):
-		s = (word.text for word in sentence if not word.is_punct and not word.is_space)
-		s = list(seg_helper.undo_substitutions(s, subs, size_meas_subs))
-	yield (seg_helper.undo_substitutions(sentences, subs, size_meas_subs), s)
+		sent = (word.text for word in sentence if not word.is_punct and not word.is_space)
+		sent1 = (subs.get(word, word) for word in sent)
+		sent2 = (size_meas_subs.get(word, word) for word in sent1)
+		yield list(sent2)
 
 def parse_tokenized_document(self, document, subs, size_meas_subs):
 	sentences = (sent.string.strip() for sent in document.sents)
@@ -42,21 +43,21 @@ def parse_tokenized_document(self, document, subs, size_meas_subs):
 	# fix various problems and undo the substitutions
 	sentences = seg_helper.split_concatenated_sentences(sentences)
 	
-	sentences = seg_helper.fixup_sentences(sentences)
+	sentences = seg_helper.fixup_sentences(list(sentences))
 	sentences = seg_helper.split_section_headers(sentences)
-	sentences = seg_helper.delete_junk(sentences)
+	sentences = seg_helper.delete_junk(list(sentences))
 	
 	#nlp.remove_pipe('parser')
 	#nlp.add_pipe(nlp.create_pipe('tagger'))
 	
-	(sentences, words) = get_words(sentences, subs, size_meas_subs)
+	sentences = list(get_sentences(self, sentences, subs, size_meas_subs))
 
-	yield (sentences, words)
+	return sentences
 
 def do_substitutions(documents):
 	return [seg_helper.do_substitutions(seg_helper.cleanup_report(document)) for document in documents]
 
-def parse_documents(self, documents):
+def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 
 	# nlp = segmentation_init()
 	# doc = nlp(text)
@@ -73,7 +74,7 @@ def parse_documents(self, documents):
 	#results = list(results)
 	
 	partitions = partition_all(100, documents)
-	executor = Parallel(n_jobs=32)
+	executor = Parallel(n_jobs=n_cpus)
 	do = delayed(do_substitutions)
 	tasks = (do(batch) for batch in partitions)
 	results = executor(tasks)
@@ -92,7 +93,7 @@ def parse_documents(self, documents):
 	
 	#documents = [doc for doc in nlp.pipe(documents, n_threads=32, batch_size=50)]
 	
-	documents = (parse_tokenized_document(self, doc, subs, size_meas_subs) for doc, subs, size_meas_subs in zip(self.nlp_sentences.pipe(documents, n_threads=128, batch_size=32*100), subs_list, size_meas_subs_list))
+	documents = (parse_tokenized_document(self, doc, subs, size_meas_subs) for doc, subs, size_meas_subs in zip(self.nlp_sentences.pipe(documents, n_threads=n_threads, batch_size=batch_size), subs_list, size_meas_subs_list))
 
 	end = timer()	
 	print('\tdone ({0:.2f}s)'.format(end-start))
@@ -106,7 +107,7 @@ def parse_documents(self, documents):
 	#end = timer()	
 	#print('\tdone ({0:.2f}s)'.format(end-start))
 		
-	return list(zip(*documents))
+	return list(documents)
 
 
 ###############################################################################
@@ -135,6 +136,6 @@ class Segmentation(object):
 		cleaned_text = self.regex_multi_space.sub(' ', no_newlines)
 		return cleaned_text
 
-	def parse_documents(self, documents):
+	def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 		print('start parsing')
-		return parse_documents(self, documents)
+		return parse_documents(self, documents, batch_size, n_cpus, n_threads)

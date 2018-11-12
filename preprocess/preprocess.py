@@ -1,13 +1,18 @@
 import pandas as pd
-import multiprocessing as mp
+#import multiprocessing as mp
 from clarityNLP.segmentation import Segmentation
 import pickle
 import sys
 
+import os
+
+n_cpus =  os.cpu_count()
+n_threads = n_cpus * 4
+
 PATH_IN = sys.argv[1]
 PATH_OUT = sys.argv[2]
 
-CHUNKSIZE = 100*32
+CHUNKSIZE = 1#100*N_CPU
 
 def process_note(seg_obj, hadm_id, text, notes_sentences_pickler, notes_words_handle):
 	
@@ -25,8 +30,9 @@ def process_chunk(notes_chunk, i, seg_obj):
 		#notes_sentences_pickler = pickle.Pickler(notes_sentences_handle)
 		#notes_chunk.apply(lambda row: process_note(seg_obj, row.HADM_ID, row.TEXT, notes_sentences_pickler, notes_words_handle), axis=1)
 
-		s, w = seg_obj.parse_documents(notes_chunk['TEXT'])
-		
+		documents = seg_obj.parse_documents(notes_chunk['TEXT'], CHUNKSIZE, n_cpus, n_threads)
+
+		print(list(documents))
 		#notes_sentences_pickler.dump((hadm_id, sentence_list))
 		#flat_word_list = [word.lower() for sentence in word_list for word in sentence]
 		#[notes_words_handle.write('%s\n' % word.lower()) for sentence in word_list for word in sentence]
