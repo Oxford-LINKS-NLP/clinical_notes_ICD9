@@ -54,8 +54,8 @@ def parse_tokenized_document(self, document, subs, size_meas_subs):
 
 	return sentences
 
-def do_substitutions(documents):
-	return [seg_helper.do_substitutions(seg_helper.cleanup_report(document)) for document in documents]
+def do_substitutions(documents, mode):
+	return [seg_helper.do_substitutions(seg_helper.cleanup_report(document), mode) for document in documents]
 
 def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 
@@ -76,12 +76,11 @@ def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 	partitions = partition_all(100, documents)
 	executor = Parallel(n_jobs=n_cpus)
 	do = delayed(do_substitutions)
-	tasks = (do(batch) for batch in partitions)
+	tasks = (do(batch, self.mode) for batch in partitions)
 	results = executor(tasks)
 	
 	results = (item for sublist in results for item in sublist)
 	
-	#results = [do_substitutions(document) for document in documents]
 	documents, subs_list, size_meas_subs_list = zip(*results)
 
 	end = timer()
@@ -113,7 +112,7 @@ def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 ###############################################################################
 class Segmentation(object):
 
-	def __init__(self):
+	def __init__(self, mode):
 		self.regex_multi_space = re.compile(r' +')
 		self.regex_multi_newline = re.compile(r'\n+')
 		print('loading models...', end=' ')
@@ -126,7 +125,8 @@ class Segmentation(object):
 		print('done')
 
 		self.executor = futures.ThreadPoolExecutor(max_workers=32)
-
+		self.mode = mode
+		
 	def remove_newlines(self, text):
 
 		# replace newline with space

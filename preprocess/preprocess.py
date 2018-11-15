@@ -1,54 +1,42 @@
 import pandas as pd
 #import multiprocessing as mp
 from clarityNLP.segmentation import Segmentation
-import pickle
+import csv
 import sys
-
 import os
 
 n_cpus =  os.cpu_count()
 n_threads = n_cpus * 4
 
-PATH_IN = sys.argv[1]
-PATH_OUT = sys.argv[2]
+if len(sys.argv) != 4:
+	sys.exit('invalid number of arguments')
 
-CHUNKSIZE = 1#100*N_CPU
+global MODE
 
-def process_note(seg_obj, hadm_id, text, notes_sentences_pickler, notes_words_handle):
-	
-	sentence_list, word_list = seg_obj.parse_sentences(text)
-	
-	notes_sentences_pickler.dump((hadm_id, sentence_list))
-	#flat_word_list = [word.lower() for sentence in word_list for word in sentence]
-	[notes_words_handle.write('%s\n' % word.lower()) for sentence in word_list for word in sentence]
+MODE = int(sys.argv[1])
 
-	return sentence_list, word_list
+if MODE < 0 or MODE > 2:
+	sys.exit('invalid mode number (must be 0, 1 or 2)')
 
-def process_chunk(notes_chunk, i, seg_obj):
+PATH_IN = sys.argv[2]
+PATH_OUT = sys.argv[3]
+
+CHUNKSIZE = 2#100*N_CPU
+
+def process_chunk(notes_chunk, i, seg_obj, csv_writer):
 	print('processing chunk ' + str(i) + ', chunksize ' + str(CHUNKSIZE))
-	with open(PATH_OUT + 'sentences/notes_sentences_' + str(i) + '.pkl', 'wb') as notes_sentences_handle, open(PATH_OUT + 'words/notes_words_' + str(i) + '.txt', 'w') as notes_words_handle:
-		#notes_sentences_pickler = pickle.Pickler(notes_sentences_handle)
-		#notes_chunk.apply(lambda row: process_note(seg_obj, row.HADM_ID, row.TEXT, notes_sentences_pickler, notes_words_handle), axis=1)
-
-		documents = seg_obj.parse_documents(notes_chunk['TEXT'], CHUNKSIZE, n_cpus, n_threads)
-
-		print(list(documents))
-		#notes_sentences_pickler.dump((hadm_id, sentence_list))
-		#flat_word_list = [word.lower() for sentence in word_list for word in sentence]
-		#[notes_words_handle.write('%s\n' % word.lower()) for sentence in word_list for word in sentence]
 	
-	notes_sentences_handle.close()
-	notes_words_handle.close()
-
-#pool_size = mp.cpu_count()
+	documents = seg_obj.parse_documents(notes_chunk['TEXT'], CHUNKSIZE, n_cpus, n_threads)
+	rows = list(zip(notes_chunk['HADM_ID'], documents))
+	for row in rows:
+		csv_writer.writerow(row)
 
 csv_reader = pd.read_csv(PATH_IN + 'NOTEEVENTS.csv', chunksize=CHUNKSIZE)#, usecols=['HADM_ID', 'TEXT'], dtype={'HADM_ID': 'uint32', 'TEXT': 'object'})
 
-seg_obj = Segmentation()
+seg_obj = Segmentation(MODE)
 
-for i, notes_chunk in enumerate(csv_reader):
-	process_chunk(notes_chunk, i, seg_obj)
-
-#pool = mp.Pool(processes=pool_size)
-#results = [pool.apply_async(process_chunks, args=(notes_chunk, i)) for i, notes_chunk in enumerate(csv_reader)]
-#[p.get() for p in results]
+with open(PATH_OUT + 'sentences/notes_sentences' + '.csv', 'w') as notes_sentences_handle:
+	csv_writer = csv.writer(notes_sentences_handle)
+	for i, notes_chunk in enumerate(csv_reader):
+		process_chunk(notes_chunk, i, seg_obj, csv_writer)
+	notes_sentences_handle.close()

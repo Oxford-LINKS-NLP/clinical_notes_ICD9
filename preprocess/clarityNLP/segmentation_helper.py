@@ -11,6 +11,7 @@ import re2 as re
 import os
 import sys
 import json
+import hashlib
 
 from clarityNLP.date_finder import run as run_date_finder, DateValue, EMPTY_FIELD as EMPTY_DATE_FIELD
 from clarityNLP.size_measurement_finder import run as run_size_measurement, SizeMeasurement, EMPTY_FIELD as EMPTY_SMF_FIELD
@@ -23,47 +24,48 @@ TRACE = False
 
 MODULE_NAME = 'segmentation_helper.py'
 
-FIRST_NAME_TOKEN = 'firstnametok'
-LAST_NAME_TOKEN = 'lastnametok'
-DOCTOR_FIRST_NAME_TOKEN = 'doctorfirstnametok'
-DOCTOR_LAST_NAME_TOKEN = 'doctorlastnametok'
-NAME_TOKEN = 'nametok'
-NAME_PREFIX_TOKEN = 'nameprefixtok'
-ADDRESS_TOKEN = 'addresstok'
-LOCATION_TOKEN = 'locationtok'
-HOSPITAL_TOKEN = 'hospitaltok'
-PO_BOX_TOKEN = 'poboxtok'
-STATE_TOKEN = 'statenametok'
-COUNTRY_TOKEN = 'countrynametok'
-COMPANY_TOKEN = 'companynametok'
-TELEPHONE_NUMBER_TOKEN = 'telephonenumbertok'
-PAGER_NUMBER_TOKEN = 'pagernumbertok'
-SSN_TOKEN = 'ssntok'
-MEDICAL_RECORD_NUMBER_TOKEN = 'medicalrecordnumbertok'
-UNIT_NUMBER_TOKEN = 'unitnumbertok'
-AGE_OVER_90_TOKEN = 'ageover90tok'
-EMAIL_ADDRESS_TOKEN = 'emailaddresstok'
-URL_TOKEN = 'urladdresstok'
-HOLYDAY_TOKEN = 'holydaynametok'
-JOB_NUMBER_TOKEN = 'jobnumbertok'
-MD_NUMBER_TOKEN = 'mdnumbertok'
-DATE_RANGE_TOKEN = 'daterangetok'
-NUMERIC_IDENTIFIER_TOKEN = 'numericidentifiertok'
-DATE_LITERAL_TOKEN = 'datetok'
-UNIVERSITY_TOKEN = 'universitytok'
-DICTATOR_INFO_TOKEN = 'dictatorinfotok'
-CC_CONTACT_INFO_TOKEN = 'cccontactinfotok'
-CLIP_NUMBER_TOKEN = 'clipnumbertok'
-SERIAL_NUMBER_TOKEN = 'serialnumbertok'
-ATTENDING_INFO_TOKEN = 'attendinginfotok'
-PROVIDER_NUMBER_TOKEN = 'providernumbertok'
+ANONTOKEN = 'ANONTOKEN'
+FIRST_NAME_TOKEN = 'FIRSTNAMETOKEN'
+LAST_NAME_TOKEN = 'LASTNAMETOKEN'
+DOCTOR_FIRST_NAME_TOKEN = 'DOCTORFIRSTNAMETOKEN'
+DOCTOR_LAST_NAME_TOKEN = 'DOCTORLASTNAMETOKEN'
+NAME_TOKEN = 'NAMETOKEN'
+NAME_PREFIX_TOKEN = 'NAMEPREFIXTOKEN'
+ADDRESS_TOKEN = 'ADDRESSTOKEN'
+LOCATION_TOKEN = 'LOCATIONTOKEN'
+HOSPITAL_TOKEN = 'HOSPITALTOKEN'
+PO_BOX_TOKEN = 'POBOXTOKEN'
+STATE_TOKEN = 'STATENAMETOKEN'
+COUNTRY_TOKEN = 'COUNTRYNAMETOKEN'
+COMPANY_TOKEN = 'COMPANYNAMETOKEN'
+TELEPHONE_NUMBER_TOKEN = 'TELEPHONENUMBERTOKEN'
+PAGER_NUMBER_TOKEN = 'PAGERNUMBERTOKEN'
+SSN_TOKEN = 'SSNTOKEN'
+MEDICAL_RECORD_NUMBER_TOKEN = 'MEDICALRECORDNUMBERTOKEN'
+UNIT_NUMBER_TOKEN = 'UNITNUMBERTOKEN'
+AGE_OVER_90_TOKEN = 'AGEOVER90TOKEN'
+EMAIL_ADDRESS_TOKEN = 'EMAILADDRESSTOKEN'
+URL_TOKEN = 'URLADDRESSTOKEN'
+HOLYDAY_TOKEN = 'HOLYDAYNAMETOKEN'
+JOB_NUMBER_TOKEN = 'JOBNUMBERTOKEN'
+MD_NUMBER_TOKEN = 'MDNUMBERTOKEN'
+DATE_RANGE_TOKEN = 'DATERANGETOKEN'
+NUMERIC_IDENTIFIER_TOKEN = 'NUMERICIDENTIFIERTOKEN'
+DATE_LITERAL_TOKEN = 'DATETOKEN'
+UNIVERSITY_TOKEN = 'UNIVERSITYTOKEN'
+DICTATOR_INFO_TOKEN = 'DICTATORINFOTOKEN'
+CC_CONTACT_INFO_TOKEN = 'CCCONTACTINFOTOKEN'
+CLIP_NUMBER_TOKEN = 'CLIPNUMBERTOKEN'
+SERIAL_NUMBER_TOKEN = 'SERIALNUMBERTOKEN'
+ATTENDING_INFO_TOKEN = 'ATTENDINGINFOTOKEN'
+PROVIDER_NUMBER_TOKEN = 'PROVIDERNUMBERTOKEN'
 
 # regex for locating a PHI [** ... **]
 
-str_anon_start = r'(?P<anon>\[\*\*('
+#str_anon_start = r'(?P<anon>\[\*\*('
 #str_anon_date = r'(?P<anon_date>([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})|([0-9]{4})|([0-9]{4}-[0-9]{1,2})|([0-9]{1,2}-[0-9]{1,2}))'
 str_anon_date = r'(?P<anon_date>([0-9/\-]+)|([0-9]+))'
-str_sep1 = r'|((('
+#str_sep1 = r'|((('
 str_anon_first_name = r'(?P<anon_first_name>(Known firstname)|(Female First Name)|(Male First Name)|(First Name))'
 str_anon_last_name = r'(?P<anon_last_name>(Known lastname)|(Last Name))'
 str_anon_doctor_first_name = r'(?P<anon_doctor_first_name>(Doctor First Name))'
@@ -107,8 +109,9 @@ str_anon_tokens = r'|'.join([str_anon_first_name, str_anon_last_name, str_anon_d
 										str_anon_md_number, str_anon_date_range, str_anon_numeric_identifier, str_anon_date_literal, str_anon_dictator_info,
 										str_anon_cc_contact_info, str_anon_clip_number, str_anon_serial_number, str_anon_attending_info, str_anon_provider_number,
 										str_anon_default])
-str_anon_end = r')(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?)))\*\*\])'
-str_anon = r''.join([str_anon_start, str_anon_date, str_sep1, str_anon_tokens, str_anon_end])
+#str_anon_end = r')(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?)))\*\*\])'
+#str_anon = r''.join([str_anon_start, str_anon_date, str_sep1, str_anon_tokens, str_anon_end])
+str_anon = r'(?P<anon>\[\*\*(({date})|(({tokens})(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?))\*\*\])'.format(date=str_anon_date, tokens=str_anon_tokens)
 #regex_anon = re.compile(str_anon)
 
 # regex for locating a contrast agent expression
@@ -199,14 +202,14 @@ str_gender   = r'(?i:(?P<gender>\b(sex|gender)\s*:\s*(male|female|m\.?|f\.?)))'
 #regex_gender = re.compile(str_gender, re.IGNORECASE)
 
 expr_list = [str_abbrev,
-			str_vitals,
-			str_caps_header,
-			str_anon,
-			str_contrast,
-			str_fov,
-			str_prescription,
-			str_gender
-			]
+				str_vitals,
+				str_caps_header,
+				str_anon,
+				str_contrast,
+				str_fov,
+				str_prescription,
+				str_gender]
+			
 expr = r'|'.join(expr_list)
 regex = re.compile(expr, max_mem=(300 << 20))
 
@@ -248,45 +251,24 @@ def find_size_meas_subs(report, subs, text):
 
 	return new_report
 
+def generate_token(base_name, mo, mode):
+	
+	if mode == 0:
+		return ANONTOKEN
+	elif mode == 1:
+		return base_name
+	elif mode == 2:
+		if mo.group('anon_id'):
+			return '{0}_{1}'.format(base_name, hashlib.md5(mo.group('anon').encode()).hexdigest())
+		else:
+			return base_name
 
-###############################################################################
-#def find_substitutions(report, regex, sub_list, text):
-#	"""
-#	"""
-#
-#	subs = []
-#	iterator = regex.finditer(report)
-#	for match in iterator:
-#		subs.append( (match.start(), match.end(), match.group()) )
-#
-#	if 0 == len(subs):
-#		return report
-#
-#	counter = 0
-#	prev_end = 0
-#	new_report = ''
-#	for start, end, match_text in subs:
-#		chunk1 = report[prev_end:start]
-#		replacement = '{0}{1:03}'.format(text, counter)
-#		new_report += chunk1 + replacement
-#		prev_end = end
-#		sub_list.append( (replacement, match_text) )
-#		counter += 1
-#	new_report += report[prev_end:]
-#
-#	return new_report
-		
-		
-###############################################################################
-
-def do_substitutions(report):
+def do_substitutions(report, mode):
 
 	subs = {}
 	size_meas_subs = {}
 
 	token_counter = 0
-	anon_counter = 0
-	anon_date_counter = 0
 	contrast_counter = 0
 	fov_counter = 0
 	size_meas_counter = 0
@@ -297,10 +279,10 @@ def do_substitutions(report):
 	gender_counter = 0
 	
 	def repl(mo):
+		
+		nonlocal mode
 	
 		nonlocal token_counter
-		nonlocal anon_counter
-		nonlocal anon_date_counter
 		nonlocal contrast_counter
 		nonlocal fov_counter
 		nonlocal size_meas_counter
@@ -322,91 +304,83 @@ def do_substitutions(report):
 			replacement = 'VITALS{0}'.format(vitals_counter)
 			subs[replacement] = text
 			return ' {0} '.format(replacement)
-		if mo.group('caps_header'):
+		elif mo.group('caps_header'):
 			header_counter += 1
 			replacement = 'HEADER{0}'.format(header_counter)
 			subs[replacement] = text
 			return ' {0} '.format(replacement)
 		elif mo.group('anon') and mo.group('anon_date'):
-			#anon_counter += 1
-			#replacement = 'ANONDATE{0}'.format(anon_date_counter)
-			#subs[replacement] = mo.group('anon_date')
 			return mo.group('anon_date').replace('/', '').replace('-', '/')
 		elif mo.group('anon') and mo.group('anon_first_name'):
-			return FIRST_NAME_TOKEN
+			return generate_token(FIRST_NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_last_name'):
-			return LAST_NAME_TOKEN
+			return generate_token(LAST_NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_doctor_first_name'):
-			return DOCTOR_FIRST_NAME_TOKEN
+			return generate_token(DOCTOR_FIRST_NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_doctor_last_name'):
-			return DOCTOR_LAST_NAME_TOKEN
+			return generate_token(DOCTOR_LAST_NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_name'):
-			return NAME_TOKEN
-			#elif mo.group('anon') and mo.group('anon_id'):
-			#	return ' ANONID{0} '.format(mo.group('anon_id'))
+			return generate_token(NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_name_prefix'):
-			return NAME_PREFIX_TOKEN
+			return generate_token(NAME_PREFIX_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_address'):
-			return ADDRESS_TOKEN
+			return generate_token(ADDRESS_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_university'):
-			return UNIVERSITY_TOKEN
+			return generate_token(UNIVERSITY_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_location'):
-			return LOCATION_TOKEN
+			return generate_token(LOCATION_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_hospital'):
-			return HOSPITAL_TOKEN
+			return generate_token(HOSPITAL_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_po_box'):
-			return PO_BOX_TOKEN
+			return generate_token(PO_BOX_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_state'):
-			return STATE_TOKEN
+			return generate_token(STATE_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_country'):
-			return COUNTRY_TOKEN
+			return generate_token(COUNTRY_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_company'):
-			return COMPANY_TOKEN
+			return generate_token(COMPANY_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_telephone_number'):
-			return TELEPHONE_NUMBER_TOKEN
+			return generate_token(TELEPHONE_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_pager_number'):
-			return PAGER_NUMBER_TOKEN
+			return generate_token(PAGER_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_social_security_number'):
-			return SSN_TOKEN
+			return generate_token(SSN_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_medical_record_number'):
-			return MEDICAL_RECORD_NUMBER_TOKEN
+			return generate_token(MEDICAL_RECORD_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_unit_number'):
-			return UNIT_NUMBER_TOKEN
+			return generate_token(UNIT_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_age_over_90'):
-			return AGE_OVER_90_TOKEN
+			return generate_token(AGE_OVER_90_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_email_address'):
-			return EMAIL_ADDRESS_TOKEN
+			return generate_token(EMAIL_ADDRESS_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_url'):
-			return URL_TOKEN
+			return generate_token(URL_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_holiday'):
-			return HOLYDAY_TOKEN
+			return generate_token(HOLYDAY_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_job_number'):
-			return JOB_NUMBER_TOKEN
+			return generate_token(JOB_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_md_number'):
-			return MD_NUMBER_TOKEN
+			return generate_token(MD_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_date_range'):
-			return DATE_RANGE_TOKEN
+			return generate_token(DATE_RANGE_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_numeric_identifier'):
-			return NUMERIC_IDENTIFIER_TOKEN
+			return generate_token(NUMERIC_IDENTIFIER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_date_literal'):
-			return DATE_LITERAL_TOKEN
+			return generate_token(DATE_LITERAL_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_dictator_info'):
-			return DICTATOR_INFO_TOKEN
+			return generate_token(DICTATOR_INFO_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_cc_contact_info'):
-			return CC_CONTACT_INFO_TOKEN
+			return generate_token(CC_CONTACT_INFO_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_clip_number'):
-			return CLIP_NUMBER_TOKEN
+			return generate_token(CLIP_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_serial_number'):
-			return SERIAL_NUMBER_TOKEN
+			return generate_token(SERIAL_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_attending_info'):
-			return ATTENDING_INFO_TOKEN
+			return generate_token(ATTENDING_INFO_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_provider_number'):
-			return PROVIDER_NUMBER_TOKEN
+			return generate_token(PROVIDER_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon'):
-			anon_counter += 1
-			replacement = 'ANON{0}'.format(anon_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
+			return generate_token(ANONTOKEN, mo, mode)
 		elif mo.group('contrast'):
 			contrast_counter += 1
 			replacement = 'CONTRAST{0}'.format(contrast_counter)
@@ -435,9 +409,6 @@ def do_substitutions(report):
 
 	report = regex.sub(repl, report)
 	report = find_size_meas_subs(report, size_meas_subs, 'MEAS')
-
-	#if TRACE:
-	#	print('REPORT AFTER SUBSTITUTIONS: \n' + report + '\n')
 
 	return (report, subs, size_meas_subs)
 
