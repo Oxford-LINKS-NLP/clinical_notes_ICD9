@@ -92,7 +92,7 @@ def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 	
 	#documents = [doc for doc in nlp.pipe(documents, n_threads=32, batch_size=50)]
 	
-	documents = (parse_tokenized_document(self, doc, subs, size_meas_subs) for doc, subs, size_meas_subs in zip(self.nlp_sentences.pipe(documents, n_threads=n_threads, batch_size=batch_size), subs_list, size_meas_subs_list))
+	documents = list(parse_tokenized_document(self, doc, subs, size_meas_subs) for doc, subs, size_meas_subs in zip(self.nlp_sentences.pipe(documents, n_threads=n_threads, batch_size=batch_size), subs_list, size_meas_subs_list))
 
 	end = timer()	
 	print('\tdone ({0:.2f}s)'.format(end-start))
@@ -106,7 +106,7 @@ def parse_documents(self, documents, batch_size, n_cpus, n_threads):
 	#end = timer()	
 	#print('\tdone ({0:.2f}s)'.format(end-start))
 		
-	return list(documents)
+	return documents
 
 
 ###############################################################################
