@@ -8,19 +8,7 @@ For import only.
 """
 
 import re2 as re
-import os
-import sys
-import json
 import hashlib
-
-from clarityNLP.date_finder import run as run_date_finder, DateValue, EMPTY_FIELD as EMPTY_DATE_FIELD
-from clarityNLP.size_measurement_finder import run as run_size_measurement, SizeMeasurement, EMPTY_FIELD as EMPTY_SMF_FIELD
-
-VERSION_MAJOR = 0
-VERSION_MINOR = 2
-
-# set to True to enable debug output
-TRACE = False
 
 MODULE_NAME = 'segmentation_helper.py'
 
@@ -62,10 +50,7 @@ PROVIDER_NUMBER_TOKEN = 'PROVIDERNUMBERTOKEN'
 
 # regex for locating a PHI [** ... **]
 
-#str_anon_start = r'(?P<anon>\[\*\*('
-#str_anon_date = r'(?P<anon_date>([0-9]{4}-[0-9]{1,2}-[0-9]{1,2})|([0-9]{4})|([0-9]{4}-[0-9]{1,2})|([0-9]{1,2}-[0-9]{1,2}))'
 str_anon_date = r'(?P<anon_date>([0-9/\-]+)|([0-9]+))'
-#str_sep1 = r'|((('
 str_anon_first_name = r'(?P<anon_first_name>(Known firstname)|(Female First Name)|(Male First Name)|(First Name))'
 str_anon_last_name = r'(?P<anon_last_name>(Known lastname)|(Last Name))'
 str_anon_doctor_first_name = r'(?P<anon_doctor_first_name>(Doctor First Name))'
@@ -109,8 +94,7 @@ str_anon_tokens = r'|'.join([str_anon_first_name, str_anon_last_name, str_anon_d
 										str_anon_md_number, str_anon_date_range, str_anon_numeric_identifier, str_anon_date_literal, str_anon_dictator_info,
 										str_anon_cc_contact_info, str_anon_clip_number, str_anon_serial_number, str_anon_attending_info, str_anon_provider_number,
 										str_anon_default])
-#str_anon_end = r')(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?)))\*\*\])'
-#str_anon = r''.join([str_anon_start, str_anon_date, str_sep1, str_anon_tokens, str_anon_end])
+										
 str_anon = r'(?P<anon>\[\*\*(({date})|(({tokens})(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?))\*\*\])'.format(date=str_anon_date, tokens=str_anon_tokens)
 #regex_anon = re.compile(str_anon)
 
@@ -188,17 +172,15 @@ str_with	 = r'\bw/'
 str_am_pm	= r'\b(a|p)\.m\.'
 str_time	 = r'(2[0-3]|1[0-9]|[0-9]):[0-5][0-9]\s*(a|A|p|P)(\s*\.)?(m|M)(\s*\.)?'
 str_s_p	  = r'\bs/p'
-str_r_l	  = r'\b(Right|Left)\s+[A-Z]+'
+#str_r_l	  = r'\b(Right|Left)\s+[A-Z]+'
 str_sust_rel = r'\bSust\.?\s*Rel\.?'
 str_sig	  = r'\bSig\s*:\s*[a-z0-9]+'
-str_abbrev   = r'(?i:(?P<abbrev>' + str_weekday + r'|' + str_h_o + r'|' + str_r_o + r'|'   +\
-			   str_with + r'|' + str_time + r'|' + str_am_pm + r'|'		  +\
-			   str_s_p + r'|' + str_r_l + r'|' + str_sust_rel + r'|'		 +\
-			   str_sig + r'))'
+str_abbr_list = r'|'.join([str_weekday, str_h_o, str_r_o, str_with, str_time, str_am_pm, str_s_p, str_sust_rel, str_sig])
+str_abbrev   = r'(?i:(?P<abbrev>({abbr_list})))'.format(abbr_list=str_abbr_list)
 #regex_abbrev = re.compile(str_abbrev, re.IGNORECASE)
 
 # gender
-str_gender   = r'(?i:(?P<gender>\b(sex|gender)\s*:\s*(male|female|m\.?|f\.?)))'
+#str_gender   = r'(?i:(?P<gender>\b(sex|gender)\s*:\s*(male|female|m\.?|f\.?)))'
 #regex_gender = re.compile(str_gender, re.IGNORECASE)
 
 expr_list = [str_abbrev,
@@ -207,11 +189,13 @@ expr_list = [str_abbrev,
 				str_anon,
 				str_contrast,
 				str_fov,
-				str_prescription,
-				str_gender]
+				str_prescription]
 			
 expr = r'|'.join(expr_list)
 regex = re.compile(expr, max_mem=(300 << 20))
+
+regex_multi_space = re.compile(r' +')
+regex_multi_newline = re.compile(r'\n+')
 
 ###############################################################################
 def enable_debug():
@@ -224,33 +208,17 @@ def disable_debug():
 	global TRACE
 	TRACE = False
 
+###############################################################################
+def remove_newlines(text):
+
+		# replace newline with space
+		no_newlines = regex_multi_newline.sub(' ', text)
+
+		# replace multiple consecutive spaces with single space
+		cleaned_text = regex_multi_space.sub(' ', no_newlines)
+		return cleaned_text
 
 ###############################################################################
-def find_size_meas_subs(report, subs, text):
-
-	json_string = run_size_measurement(report)
-	if '[]' == json_string:
-		return report
-	
-	json_data = json.loads(json_string)
-
-	# unpack JSON result into a list of SizeMeasurement namedtuples
-	measurements = [SizeMeasurement(**m) for m in json_data]
-
-	counter = 0
-	prev_end = 0
-	new_report = ''
-	for m in measurements:
-		chunk1 = report[prev_end:m.start]
-		replacement = '{0}{1:03}'.format(text, counter)
-		new_report += chunk1 + replacement
-		prev_end = m.end
-		subs[replacement] = m.text
-		counter += 1
-	new_report += report[prev_end:]
-
-	return new_report
-
 def generate_token(base_name, mo, mode):
 	
 	if mode == 0:
@@ -263,20 +231,16 @@ def generate_token(base_name, mo, mode):
 		else:
 			return base_name
 
-def do_substitutions(report, mode):
+def do_substitutions(document, mode):
 
 	subs = {}
-	size_meas_subs = {}
 
 	token_counter = 0
 	contrast_counter = 0
 	fov_counter = 0
-	size_meas_counter = 0
-	header_counter = 0
 	prescription_counter = 0
 	vitals_counter = 0
 	abbrev_counter = 0
-	gender_counter = 0
 	
 	def repl(mo):
 		
@@ -285,12 +249,9 @@ def do_substitutions(report, mode):
 		nonlocal token_counter
 		nonlocal contrast_counter
 		nonlocal fov_counter
-		nonlocal size_meas_counter
-		nonlocal header_counter
 		nonlocal prescription_counter
 		nonlocal vitals_counter
 		nonlocal abbrev_counter
-		nonlocal gender_counter
 	
 		text = mo.string[mo.start():mo.end()]
 	
@@ -302,11 +263,6 @@ def do_substitutions(report, mode):
 		elif mo.group('vitals'):
 			vitals_counter += 1
 			replacement = 'VITALS{0}'.format(vitals_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		elif mo.group('caps_header'):
-			header_counter += 1
-			replacement = 'HEADER{0}'.format(header_counter)
 			subs[replacement] = text
 			return ' {0} '.format(replacement)
 		elif mo.group('anon') and mo.group('anon_date'):
@@ -396,60 +352,16 @@ def do_substitutions(report, mode):
 			replacement = 'PRESCRIPTION{0}'.format(prescription_counter)
 			subs[replacement] = text
 			return ' {0} '.format(replacement)
-		elif mo.group('gender'):
-			gender_counter += 1
-			replacement = 'GENDER{0}'.format(gender_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
 		else:
 			token_counter += 1
 			replacement = 'TOKEN{0}'.format(token_counter)
 			subs[replacement] = text
 			return ' {0} '.format(replacement)
 
-	report = regex.sub(repl, report)
-	report = find_size_meas_subs(report, size_meas_subs, 'MEAS')
+	document = remove_newlines(document)
+	document = regex.sub(repl, document)
 
-	return (report, subs, size_meas_subs)
-
-###############################################################################
-def replace_text(sentence_list, sub_list):
-
-	num = len(sentence_list)
-	for i in range(num):
-		count = 0
-		#replacements = []
-		sentence = sentence_list[i]
-		for entry in sub_list:
-			sub = entry[0]
-			orig = entry[1]
-			if -1 != sentence.find(sub):
-				sentence = sentence.replace(sub, orig)
-				#replacements.append(sub)
-				count += 1
-		yield sentence
-		
-		# remove used entries from sub_list
-		if count > 0:
-			sub_list = sub_list[count:]
-	
-###############################################################################
-def undo_substitutions(sentence_list, subs, size_meas_subs):
-	
-	# undo in reverse order from that in 'do_substitutions'
-	
-	def multiple_replace(sentence_list, regex):
-		nonlocal subs
-		# For each match, look-up corresponding value in dictionary  
-		return (regex.sub(lambda mo: subs[mo.string[mo.start():mo.end()]], sentence) for sentence in sentence_list)
-	
-	# Create a regular expression  from the dictionary keys
-	regex = re.compile("({0})".format("|".join(map(re.escape, subs.keys()))), max_mem=(300 << 20))
-	
-	sentence_list = multiple_replace(sentence_list, regex)
-	sentence_list = list(replace_text(sentence_list, size_meas_subs))
-
-	return sentence_list
+	return (document, subs)
 
 ###############################################################################
 def erase_spans(report, span_list):
@@ -652,9 +564,3 @@ def delete_junk(sentence_list):
 		i += 1
 
 	#return sentences
-
-
-###############################################################################
-def get_version():
-	return '{0} {1}.{2}'.format(MODULE_NAME, VERSION_MAJOR, VERSION_MINOR)
-

@@ -21,7 +21,7 @@ if MODE < 0 or MODE > 2:
 PATH_IN = sys.argv[2]
 PATH_OUT = sys.argv[3]
 
-CHUNKSIZE = 1*n_cpus
+CHUNKSIZE = 100*n_cpus
 
 def process_chunk(notes_chunk, i, seg_obj, notes_sentences_handle):
 	print('processing chunk {0}, chunksize {1}'.format(i, CHUNKSIZE))
