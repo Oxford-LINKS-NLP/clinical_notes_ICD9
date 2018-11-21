@@ -1,45 +1,42 @@
 import pandas as pd
-#import multiprocessing as mp
-from clarityNLP.segmentation import Segmentation
-import csv
+from clarityNLP.segmentation import Tokenizer
 import sys
 import os
-
 import ndjson
+import argparse
 
+parser = argparse.ArgumentParser(description='Tokenize MIMIC-III clinical notes')
+parser.add_argument('input_file', type=str, help='input file path')
+parser.add_argument('output_folder', type=str, help='output folder path')
+parser.add_argument('--base-batch-size', type=int, required=False, dest='base_batch_size', default=100,
+							help='number of documents to process for each core (default: 100)')
+parser.add_argument('--n-threads', type=int, required=False, dest='n_threads', default=4,
+							help='number of threads per core (default: 4)')
+args = parser.parse_args()
+
+output_file = os.path.join(args.output_folder + 'notes_tokenized.ndjson')
 n_cpus =  os.cpu_count()
-n_threads = n_cpus * 4
+n_threads = n_cpus * args.n_threads
+batch_size = args.base_batch_size * n_cpus
 
-if len(sys.argv) != 4:
-	sys.exit('invalid number of arguments')
+MODE = 2
 
-MODE = int(sys.argv[1])
-
-if MODE < 0 or MODE > 2:
-	sys.exit('invalid mode number (must be 0, 1 or 2)')
-
-PATH_IN = sys.argv[2]
-PATH_OUT = sys.argv[3]
-
-CHUNKSIZE = 100*n_cpus
-
-def process_chunk(notes_chunk, i, seg_obj, notes_sentences_handle):
-	print('processing chunk {0}, chunksize {1}'.format(i, CHUNKSIZE))
+def process_batch(notes_batch, i, seg_obj, notes_tokenized_file):
+	print('processing batch {0}, batchsize {1}'.format(i, batch_size))
 	
-	documents = seg_obj.parse_documents(notes_chunk['TEXT'], CHUNKSIZE, n_cpus, n_threads)
+	documents = tokenizer.tokenize_documents(notes_batch['TEXT'])
 	n_tokens = [sum(len(sentence) for sentence in doc) for doc in documents]
-	rows = list(zip(notes_chunk['HADM_ID'].fillna(-1).astype('int32'), notes_chunk['SUBJECT_ID'], notes_chunk['CATEGORY'], notes_chunk['DESCRIPTION'], notes_chunk['ISERROR'].fillna(0).astype(bool), n_tokens, documents))
-	print('\n'.join(token for doc in documents for sentence in doc for token in sentence))
+	rows = list(zip(notes_batch['HADM_ID'].fillna(-1).astype('int32'), notes_batch['SUBJECT_ID'], notes_batch['CATEGORY'], notes_batch['DESCRIPTION'], notes_batch['ISERROR'].fillna(0).astype(bool), n_tokens, documents))
+	#print('\n'.join(token for doc in documents for sentence in doc for token in sentence))
 
-	ndjson.dump(rows, notes_sentences_handle)
-	notes_sentences_handle.write('\n')
+	ndjson.dump(rows, notes_tokenized_file)
+	notes_tokenized_file.write('\n')
 
-csv_reader = pd.read_csv(PATH_IN + 'NOTEEVENTS.csv', usecols=['HADM_ID', 'SUBJECT_ID', 'CATEGORY', 'DESCRIPTION', 'ISERROR','TEXT'], dtype={'HADM_ID': 'str', 'SUBJECT_ID':'int32', 'CATEGORY': 'str', 'DESCRIPTION':'str', 'ISERROR':'str', 'TEXT':'str'}, keep_default_na=False, na_values='', chunksize=CHUNKSIZE)
+csv_reader = pd.read_csv(args.input_file, chunksize=batch_size, usecols=['HADM_ID', 'SUBJECT_ID', 'CATEGORY', 'DESCRIPTION', 'ISERROR','TEXT'], dtype={'HADM_ID': 'str', 'SUBJECT_ID':'int32', 'CATEGORY': 'str', 'DESCRIPTION':'str', 'ISERROR':'str', 'TEXT':'str'}, keep_default_na=False, na_values='')
 
-seg_obj = Segmentation(MODE)
+tokenizer = Tokenizer(args.base_batch_size, n_cpus, n_threads, MODE)
 
-with open(PATH_OUT + 'sentences/notes_sentences' + '.ndjson', 'w') as notes_sentences_handle:
+with open(output_file, 'x') as notes_tokenized_file:
 
-	for i, notes_chunk in enumerate(csv_reader):
-		process_chunk(notes_chunk, i, seg_obj, notes_sentences_handle)
-	notes_sentences_handle.close()
+	for i, notes_batch in enumerate(csv_reader):
+		process_batch(notes_batch, i, seg_obj, notes_tokenized_file)

@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
 
 import re2 as re
-import os
-import sys
-import json
-import time
-import optparse
 import en_core_web_md as english_model
-from concurrent import futures
-import threading
 from timeit import default_timer as timer
-
 from toolz import partition_all
-from joblib import Parallel, delayed
+from multiprocessing import Pool
 
 import clarityNLP.segmentation_helper as seg_helper
 
@@ -27,7 +19,7 @@ MODULE_NAME = 'segmentation.py'
 ###############################################################################
 
 def get_sentences(self, sentence_list, subs):
-	for sentence in self.nlp_words.pipe(sentence_list, n_threads=128):
+	for sentence in self.nlp_words.pipe(sentence_list, n_threads=self.n_threads):
 		sent = (word.text for word in sentence if not word.is_punct and not word.is_space)
 		sent1 = (str.lower(subs.get(word, word).strip().rstrip(':-').replace(' ', '_')) for word in sent)
 		yield list(sent1)
@@ -49,44 +41,10 @@ def parse_tokenized_document(self, document, subs):
 def do_substitutions(documents, mode):
 	return [seg_helper.do_substitutions(seg_helper.cleanup_report(document), mode) for document in documents]
 
-def parse_documents(self, documents, batch_size, n_cpus, n_threads):
-	
-	# Do some cleanup and substitutions before tokenizing. The substitutions
-	# replace strings of tokens that tend to be incorrectly split with
-	# a single token that will not be split.
-	
-	start = timer()
-	print('\tcleaning and substitutions...', end=' ')
-		
-	partitions = partition_all(100, documents)
-	executor = Parallel(n_jobs=n_cpus)
-	do = delayed(do_substitutions)
-	tasks = (do(batch, self.mode) for batch in partitions)
-	results = executor(tasks)
-	
-	results = (item for sublist in results for item in sublist)
-	
-	documents, subs_list = zip(*results)
-
-	end = timer()
-	print('\tdone ({0:.2f}s)'.format(end-start))
-
-	# do the tokenization with the substitutions in place
-	start = timer()
-	print('\ttokenization...', end=' ')
-	
-	documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=n_threads, batch_size=batch_size), subs_list))
-
-	end = timer()	
-	print('\tdone ({0:.2f}s)'.format(end-start))
-		
-	return documents
-
-
 ###############################################################################
-class Segmentation(object):
+class Tokenizer(object):
 
-	def __init__(self, mode):
+	def __init__(self, base_batch_size, n_cpus, n_threads, mode):
 	
 		print('loading models...', end=' ')
 		self.nlp_sentences = english_model.load()
@@ -97,9 +55,41 @@ class Segmentation(object):
 		self.nlp_words.remove_pipe('ner')
 		print('done')
 
-		self.executor = futures.ThreadPoolExecutor(max_workers=32)
+		self.base_batch_size = base_batch_size
+		self.n_cpus = n_cpus
+		self.n_threads = n_threads
 		self.mode = mode
 
-	def parse_documents(self, documents, batch_size, n_cpus, n_threads):
+	def tokenize_documents(self, documents):
+		
+		# Do some cleanup and substitutions before tokenizing. The substitutions
+		# replace strings of tokens that tend to be incorrectly split with
+		# a single token that will not be split.
+		
 		print('start parsing')
-		return parse_documents(self, documents, batch_size, n_cpus, n_threads)
+		start = timer()
+		print('\tcleaning and substitutions...', end=' ')
+			
+		pool = Pool(processes=self.n_cpus)
+
+		partitions = partition_all(self.base_batch_size, documents)
+
+		results_async = [pool.apply_async(do_substitutions, args=(batch, self.mode)) for batch in partitions]
+		
+		results_partitioned = (res.get() for res in results_async)
+		results = (result for result_partition in results_partitioned for result in result_partition)
+		documents, subs_lists = zip(*results)
+
+		end = timer()
+		print('\tdone ({0:.2f}s)'.format(end-start))
+
+		# do the tokenization with the substitutions in place
+		start = timer()
+		print('\ttokenization...', end=' ')
+		
+		documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=self.n_threads, batch_size=len(documents)), subs_lists))
+
+		end = timer()	
+		print('\tdone ({0:.2f}s)'.format(end-start))
+			
+		return documents
