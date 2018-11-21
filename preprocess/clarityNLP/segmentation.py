@@ -25,6 +25,7 @@ def get_sentences(self, sentence_list, subs):
 		yield list(sent1)
 
 def parse_tokenized_document(self, document, subs):
+
 	sentences = (sent.string.strip() for sent in document.sents)
 	
 	# fix various problems and undo the substitutions
@@ -68,7 +69,7 @@ class Tokenizer(object):
 		
 		print('start parsing')
 		start = timer()
-		print('\tcleaning and substitutions...', end=' ')
+		print('\tcleaning and substitutions...')
 			
 		pool = Pool(processes=self.n_cpus)
 
@@ -77,17 +78,18 @@ class Tokenizer(object):
 		results_async = [pool.apply_async(do_substitutions, args=(batch, self.mode)) for batch in partitions]
 		
 		results_partitioned = (res.get() for res in results_async)
-		results = (result for result_partition in results_partitioned for result in result_partition)
+		results = [result for result_partition in results_partitioned for result in result_partition]
+		results.sort(key=lambda tup : len(tup[0]))
 		documents, subs_lists = zip(*results)
 
 		end = timer()
 		print('\tdone ({0:.2f}s)'.format(end-start))
-
+		
 		# do the tokenization with the substitutions in place
 		start = timer()
-		print('\ttokenization...', end=' ')
+		print('\ttokenization...')
 		
-		documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=self.n_threads, batch_size=len(documents)), subs_lists))
+		documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=self.n_threads, batch_size=128), subs_lists))
 
 		end = timer()	
 		print('\tdone ({0:.2f}s)'.format(end-start))
