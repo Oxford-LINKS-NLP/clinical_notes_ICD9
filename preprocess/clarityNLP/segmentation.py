@@ -71,16 +71,15 @@ class Tokenizer(object):
 		start = timer()
 		print('\tcleaning and substitutions...')
 			
-		pool = Pool(processes=self.n_cpus)
+		with Pool(processes=self.n_cpus) as pool:
 
-		partitions = partition_all(self.base_batch_size, documents)
+			partitions = partition_all(self.base_batch_size, documents)
 
-		results_async = [pool.apply_async(do_substitutions, args=(batch, self.mode)) for batch in partitions]
-		
-		results_partitioned = (res.get() for res in results_async)
-		results = [result for result_partition in results_partitioned for result in result_partition]
-		results.sort(key=lambda tup : len(tup[0]))
-		documents, subs_lists = zip(*results)
+			results_async = [pool.apply_async(do_substitutions, args=(batch, self.mode)) for batch in partitions]
+			results_partitioned = (res.get() for res in results_async)
+			results = (result for result_partition in results_partitioned for result in result_partition)
+			#results.sort(key=lambda tup : len(tup[0]))
+			documents, subs_lists = zip(*results)
 
 		end = timer()
 		print('\tdone ({0:.2f}s)'.format(end-start))
@@ -89,9 +88,9 @@ class Tokenizer(object):
 		start = timer()
 		print('\ttokenization...')
 		
-		documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=self.n_threads, batch_size=128), subs_lists))
+		documents = list(parse_tokenized_document(self, doc, subs) for doc, subs in zip(self.nlp_sentences.pipe(documents, n_threads=self.n_threads, batch_size=self.base_batch_size), subs_lists))
 
-		end = timer()	
+		end = timer()
 		print('\tdone ({0:.2f}s)'.format(end-start))
 			
 		return documents
