@@ -1,16 +1,248 @@
 #!/usr/bin/env python3
-"""
-
-This is a helper module for segmentation.py.
-
-For import only.
-
-"""
 
 import re2 as re
 import hashlib
+from spacy.attrs import ORTH
 
-MODULE_NAME = 'segmentation_helper.py'
+#medical abbreviations from
+#https://en.wikipedia.org/wiki/List_of_abbreviations_used_in_medical_prescriptions
+#https://en.wikipedia.org/wiki/List_of_medical_abbreviations:_Latin_abbreviations
+
+#pattern1 -> tok. tok.
+#pattern2 -> tok tok.
+
+abbrev_composite_pattern2 = ['ad lib.'
+										'ad us.'
+										'bis ind.'
+										'ex aq.'
+										'non rep.'
+										]
+
+#'d. in p. ae.'
+#'si op. sit'
+
+#vitals
+#Temp.
+#measure units
+		
+abbrev_composite_pattern1 = ['alt. d.'
+										'alt. dieb.'
+										'alt. h.'
+										'alt. hor.'
+										'aq. bull.'
+										'aq. com.'
+										'aq. dest.'
+										'aq. ferv.'
+										'cochl. ampl.'
+										'cochl. infant.'
+										'cochl. mag.'
+										'cochl. mod.'
+										'cochl. parv.'
+										'cyath. vinos.'
+										'dieb. alt.'
+										'f. pil.'
+										'hor. alt.'
+										'hor. decub.'
+										'hor. intermed.'
+										'hor. tert.'
+										'lat. dol.'
+										'mod. praescript.'
+										'omn. bih.'
+										'omn. hor.'
+										'part. aeq.'
+										]
+										
+def generate_matcher_pattern1():
+	for abbrev in abbrev_composite_pattern1:
+		w1, w2 = [w.strip() for w in abbrev.split('.')][:2]
+		yield ('{}_{}_1'.format(w1, w2), [{ORTH: w1}, {ORTH: '.'}, {ORTH: w2}, {ORTH: '.'}])
+		yield ('{}_{}_2'.format(w1, w2), [{ORTH: w1+'.'}, {ORTH: w2}, {ORTH: '.'}])
+		yield ('{}_{}_3'.format(w1, w2), [{ORTH: w1}, {ORTH: '.'}, {ORTH: w2+'.'}])
+
+abbrev_list = {'a.c.': [{ORTH: 'a.c.'}],
+					'a.c.h.s.': [{ORTH: 'a.c.h.s.'}],
+					'ac&hs': [{ORTH: 'ac&hs'}],
+					'a.d.': [{ORTH: 'a.d.'}],
+					'ad.': [{ORTH: 'ad.'}],
+					'add.': [{ORTH: 'add.'}],
+					'admov.': [{ORTH: 'admov.'}],
+					'aeq.': [{ORTH: 'aeq.'}],
+					'agit.': [{ORTH: 'agit.'}],
+					'amp.': [{ORTH: 'amp.'}],
+					'aq.': [{ORTH: 'aq.'}],
+					'a.l.': [{ORTH: 'a.l.'}],
+					'a.s.': [{ORTH: 'a.s.'}],
+					'a.u.': [{ORTH: 'a.u.'}],
+					'b.d.s.': [{ORTH: 'b.d.s.'}],
+					'bib.': [{ORTH: 'bib.'}],
+					'b.i.d.': [{ORTH: 'b.i.d.'}],
+					'b.d.': [{ORTH: 'b.d.'}],
+					'bol.': [{ORTH: 'bol.'}],
+					'Ph.Br.': [{ORTH: 'Ph.Br.'}],
+					'b.t.': [{ORTH: 'b.t.'}],
+					'bucc.': [{ORTH: 'bucc.'}],
+					'cap.': [{ORTH: 'cap.'}],
+					'caps.': [{ORTH: 'caps.'}],
+					'c.m.': [{ORTH: 'c.m.'}],
+					'c.m.s.': [{ORTH: 'c.m.s.'}],
+					'c.': [{ORTH: 'c.'}],
+					'cib.': [{ORTH: 'cib.'}],
+					'c.c.': [{ORTH: 'c.c.'}],
+					'cf.': [{ORTH: 'cf.'}],
+					'c.n.': [{ORTH: 'c.n.'}],
+					'cochl.': [{ORTH: 'cochl.'}],
+					'colet.': [{ORTH: 'colet.'}],
+					'comp.': [{ORTH: 'comp.'}],
+					'contin.': [{ORTH: 'contin.'}],
+					'cpt.': [{ORTH: 'cpt.'}],
+					'cr.': [{ORTH: 'cr.'}],
+					'cuj.': [{ORTH: 'cuj.'}],
+					'c.v.': [{ORTH: 'c.v.'}],
+					'cyath.': [{ORTH: 'cyath.'}],
+					'd.': [{ORTH: 'd.'}],
+					'D/C': [{ORTH: 'D/C'}],
+					'decoct.': [{ORTH: 'decoct.'}],
+					'det.': [{ORTH: 'det.'}],
+					'dil.': [{ORTH: 'dil.'}],
+					'dim.': [{ORTH: 'dim.'}],
+					'disp.': [{ORTH: 'disp.'}],
+					'div.': [{ORTH: 'div.'}],
+					'd.t.d. .': [{ORTH: 'd.t.d. .'}],
+					'elix.': [{ORTH: 'elix.'}],
+					'e.m.p.': [{ORTH: 'e.m.p.'}],
+					'emuls.': [{ORTH: 'emuls.'}],
+					'exhib.': [{ORTH: 'exhib.'}],
+					'f.': [{ORTH: 'f.'}],
+					'f.h.': [{ORTH: 'f.h.'}],
+					'fl.': [{ORTH: 'fl.'}],
+					'fld.': [{ORTH: 'fld.'}],
+					'f.m.': [{ORTH: 'f.m.'}],
+					'f.s.a.': [{ORTH: 'f.s.a.'}],
+					'ft.': [{ORTH: 'ft.'}],
+					'garg.': [{ORTH: 'garg.'}],
+					'gr.': [{ORTH: 'gr.'}],
+					'gtt.': [{ORTH: 'gtt.'}],
+					'gutt.': [{ORTH: 'gutt.'}],
+					'h.': [{ORTH: 'h.'}],
+					'H/O': [{ORTH: 'H/O'}],
+					'hor.': [{ORTH: 'hor.'}],
+					'habt.': [{ORTH: 'habt.'}],
+					'h.s.': [{ORTH: 'h.s.'}],
+					'inj.': [{ORTH: 'inj.'}],
+					'i.m.': [{ORTH: 'i.m.'}],
+					'inf.': [{ORTH: 'inf.'}],
+					'i.v.': [{ORTH: 'i.v.'}],
+					'i.v.p.': [{ORTH: 'i.v.p.'}],
+					'lb.': [{ORTH: 'lb.'}],
+					'l.c.d.': [{ORTH: 'l.c.d.'}],
+					'liq.': [{ORTH: 'liq.'}],
+					'lot.': [{ORTH: 'lot.'}],
+					'M.': [{ORTH: 'M.'}],
+					'm.': [{ORTH: 'm.'}],
+					'max.': [{ORTH: 'max.'}],
+					'm.d.u.': [{ORTH: 'm.d.u.'}],
+					'mg/dL': [{ORTH: 'mg/dL'}],
+					'min.': [{ORTH: 'min.'}],
+					'mist.': [{ORTH: 'mist.'}],
+					'mit.': [{ORTH: 'mit.'}],
+					'mitt.': [{ORTH: 'mitt.'}],
+					'nebul.': [{ORTH: 'nebul.'}],
+					'neb.': [{ORTH: 'neb.'}],
+					'noct.': [{ORTH: 'noct.'}],
+					'n.p.o.': [{ORTH: 'n.p.o.'}],
+					'1/2NS.': [{ORTH: '1/2NS.'}],
+					'o.d.': [{ORTH: 'o.d.'}],
+					'o.m.': [{ORTH: 'o.m.'}],
+					'o.n.': [{ORTH: 'o.n.'}],
+					'o.s.': [{ORTH: 'o.s.'}],
+					'o.u.': [{ORTH: 'o.u.'}],
+					'p.': [{ORTH: 'p.'}],
+					'p.c.': [{ORTH: 'p.c.'}],
+					'p.c.h.s.': [{ORTH: 'p.c.h.s.'}],
+					'pc&hs': [{ORTH: 'pc&hs'}],
+					'Ph.Br.': [{ORTH: 'Ph.Br.'}],
+					'Ph.Eur.': [{ORTH: 'Ph.Eur.'}],
+					'Ph.Int.': [{ORTH: 'Ph.Int.'}],
+					'pig.': [{ORTH: 'pig.'}],
+					'pigm.': [{ORTH: 'pigm.'}],
+					'p.o.': [{ORTH: 'p.o.'}],
+					'ppt.': [{ORTH: 'ppt.'}],
+					'p.r.': [{ORTH: 'p.r.'}],
+					'p.r.n.': [{ORTH: 'p.r.n.'}],
+					'pt.': [{ORTH: 'pt.'}],
+					'pulv.': [{ORTH: 'pulv.'}],
+					'p.v.': [{ORTH: 'p.v.'}],
+					'q.1.d.': [{ORTH: 'q.1.d.'}],
+					'q.1.h.': [{ORTH: 'q.1.h.'}],
+					'q.2.h.': [{ORTH: 'q.2.h.'}],
+					'q.4.h.': [{ORTH: 'q.4.h.'}],
+					'q.6.h.': [{ORTH: 'q.6.h.'}],
+					'q.8.h.': [{ORTH: 'q.8.h.'}],
+					'q.a.d.': [{ORTH: 'q.a.d.'}],
+					'q.a.m.': [{ORTH: 'q.a.m.'}],
+					'q.d.': [{ORTH: 'q.d.'}],
+					'q.d.a.m.': [{ORTH: 'q.d.a.m.'}],
+					'q.d.p.m.': [{ORTH: 'q.d.p.m.'}],
+					'q.d.s.': [{ORTH: 'q.d.s.'}],
+					'q.p.m.': [{ORTH: 'q.p.m.'}],
+					'q.h.': [{ORTH: 'q.h.'}],
+					'q.h.s.': [{ORTH: 'q.h.s.'}],
+					'q.i.d.': [{ORTH: 'q.i.d.'}],
+					'q.l.': [{ORTH: 'q.l.'}],
+					'q.n.': [{ORTH: 'q.n.'}],
+					'q.o.d.': [{ORTH: 'q.o.d.'}],
+					'q.p.m.': [{ORTH: 'q.p.m.'}],
+					'q.q.': [{ORTH: 'q.q.'}],
+					'q.q.h.': [{ORTH: 'q.q.h.'}],
+					'q.s.': [{ORTH: 'q.s.'}],
+					'q.v.': [{ORTH: 'q.v.'}],
+					'rep.': [{ORTH: 'rep.'}],
+					'rept.': [{ORTH: 'rept.'}],
+					'R/L': [{ORTH: 'R/L'}],
+					'rep.': [{ORTH: 'rep.'}],
+					's.': [{ORTH: 's.'}],
+					's.a.': [{ORTH: 's.a.'}],
+					'sem.': [{ORTH: 'sem.'}],
+					's.i.d.': [{ORTH: 's.i.d.'}],
+					'Sig.': [{ORTH: 'Sig.'}],
+					'S.': [{ORTH: 'S.'}],
+					'sig.': [{ORTH: 'sig.'}],
+					'sing.': [{ORTH: 'sing.'}],
+					's.l.': [{ORTH: 's.l.'}],
+					'sol.': [{ORTH: 'sol.'}],
+					's.o.s.': [{ORTH: 's.o.s.'}],
+					's.s.': [{ORTH: 's.s.'}],
+					'st.': [{ORTH: 'st.'}],
+					'Stat.': [{ORTH: 'Stat.'}],
+					'sum.': [{ORTH: 'sum.'}],
+					'supp.': [{ORTH: 'supp.'}],
+					'susp.': [{ORTH: 'susp.'}],
+					'syr.': [{ORTH: 'syr.'}],
+					'tab.': [{ORTH: 'tab.'}],
+					'tal.': [{ORTH: 'tal.'}],
+					't.': [{ORTH: 't.'}],
+					't.d.s.': [{ORTH: 't.d.s.'}],
+					't.i.d.': [{ORTH: 't.i.d.'}],
+					't.d.': [{ORTH: 't.d.'}],
+					't.d.s.': [{ORTH: 't.d.s.'}],
+					'tinct.': [{ORTH: 'tinct.'}],
+					't.i.d.': [{ORTH: 't.i.d.'}],
+					't.i.w.': [{ORTH: 't.i.w.'}],
+					'top.': [{ORTH: 'top.'}],
+					'tinc.': [{ORTH: 'tinc.'}],
+					'tinct.': [{ORTH: 'tinct.'}],
+					'trit.': [{ORTH: 'trit.'}],
+					'troch.': [{ORTH: 'troch.'}],
+					'u.d.': [{ORTH: 'u.d.'}],
+					'ut.': [{ORTH: 'ut.'}],
+					'dict.': [{ORTH: 'dict.'}],
+					'ung.': [{ORTH: 'ung.'}],
+					'vag.': [{ORTH: 'vag.'}],
+					'w/a': [{ORTH: 'w/a'}],
+					'w/f': [{ORTH: 'w/f'}],
+					'w/o': [{ORTH: 'w/o'}],
+					'y.o.': [{ORTH: 'y.o.'}],
+					}
 
 ANONTOKEN = 'ANONTOKEN'
 FIRST_NAME_TOKEN = 'FIRSTNAMETOKEN'
@@ -96,15 +328,7 @@ str_anon_tokens = r'|'.join([str_anon_first_name, str_anon_last_name, str_anon_d
 										str_anon_default])
 										
 str_anon = r'(?P<anon>\[\*\*(({date})|(({tokens})(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?))\*\*\])'.format(date=str_anon_date, tokens=str_anon_tokens)
-#regex_anon = re.compile(str_anon)
-
-# regex for locating a contrast agent expression
-str_contrast = r'(?P<contrast>\bContrast:\s+(None|[a-zA-Z]+\s+Amt:\s+\d+(cc|CC)?))'
-#regex_contrast = re.compile(str_contrast)
-
-# regex for locating a field of view expression
-str_fov = r'(?P<fov>\bField of view:\s+\d+)'
-#regex_fov = re.compile(str_fov)
+regex_anon = re.compile(str_anon)
 
 # start of a numbered section, such as a list, but with no whitespace
 # separating the numbers from the adjacent text
@@ -130,95 +354,18 @@ regex_caps_header = re.compile(str_caps_header)
 str_two_sentences = r'(?P<two_sentences>\b[a-zA-Z]{2,}\.[A-Z][a-z]+(?!\.))'
 regex_two_sentences = re.compile(str_two_sentences)
 
-# prescription information
-str_word		 = r'\b[-a-z]+\b'
-str_words		= r'(' + str_word + r'\s*)*' + str_word
-str_drug_name	= r'\b[-A-Za-z]+(/[-A-Za-z]+)?\b'
-str_amount_num   = r'\d+(\.\d+)?'
-str_amount	   = r'(' + str_amount_num + r'(/' + str_amount_num + r')?)?'
-str_units		= r'\b[a-z]+\.?'
-str_abbrev	   = r'([a-zA-Z]\.){1,3}'
-str_abbrevs	  = r'(' + str_abbrev + r'\s+)*' + str_abbrev
-str_prescription = r'(?P<prescription>' + str_drug_name + r'\s+' + str_amount + r'\s*' + str_units + \
-				   r'\s+' + str_abbrevs + r'\s+' + str_words + r')'
-#regex_prescription = re.compile(str_prescription)
-
-# vitals
-str_sep	  = r'([-:=\s]\s*)?'
-str_temp	 = r'\b(T\.?|Temp\.?|Temperature)' + str_sep +\
-			   r'(' + str_words + r')?' + str_amount_num + r'\s*'
-str_height   = r'\b(Height|Ht\.?)' + str_sep + r'(\(in\.?\):?\s*)?' +\
-			   str_amount_num + r'\s*(inches|in\.?|feet|ft\.?|meters|m\.?)?\s*'
-str_weight   = r'\b(Weight|Wt\.?)' + str_sep + r'(\(lbs?\.?\):?\s*)?' +\
-			   str_amount_num + r'\s*(grams|gm\.?|g\.?|ounces|oz\.?|pounds|lbs\.?|kilograms|kg\.?)?\s*'
-str_bsa	  = r'\bBSA:?\s+(\(m2\):?\s*)?' + str_amount_num + r'(\s+m2)?\s*'
-str_bp	   = r'\bBP' + str_sep + r'(\(mm\s+hg\):?\s*)?\d+/\d+\s*'
-str_hr	   = r'\b(Pulse|P|HR)' + str_sep + r'(\(bpm\):?\s*)?' + str_amount_num + r'\s*'
-str_rr	   = r'\bRR?' + str_sep + r'(' + str_words + r')?' + str_amount_num + r'\s*'
-str_o2	   = r'\b(SpO2%?|SaO2|O2Sats?|O2\s+sat|O2\s+Flow|Sats?|POx|O2)' + str_sep +\
-			   r'(' + str_words + r')?' + str_amount_num + r'(/bipap|\s*%?\s*)' +\
-			   r'((/|on\s+)?(RA|NRB)|\dL(/|\s*)?NC|on\s+\d\s*L\s+(FM|NC|RA|NRB)|/?\dL)?'
-str_status   = r'\bStatus:\s+(In|Out)patient\s*'
-str_vitals   = r'(?i:(?P<vitals>(' + str_temp + r'|' + str_height + r'|' + str_weight + r'|' +\
-			   str_bsa + r'|' + str_bp + r'|' + str_hr + r'|' + str_rr + r'|' +\
-			   str_status + r'|' + str_o2 + r')+))'
-#regex_vitals = re.compile(str_vitals, re.IGNORECASE)
-
-# abbreviations
-str_weekday  = r'\b(Mon|Tues|Wed|Thurs|Thur|Thu|Fri|Sat|Sun)\.'
-str_h_o	  = r'\b\.?H/O'
-str_r_o	  = r'\br/o(ut)?'
-str_with	 = r'\bw/'
-str_am_pm	= r'\b(a|p)\.m\.'
-str_time	 = r'(2[0-3]|1[0-9]|[0-9]):[0-5][0-9]\s*(a|A|p|P)(\s*\.)?(m|M)(\s*\.)?'
-str_s_p	  = r'\bs/p'
-#str_r_l	  = r'\b(Right|Left)\s+[A-Z]+'
-str_sust_rel = r'\bSust\.?\s*Rel\.?'
-str_sig	  = r'\bSig\s*:\s*[a-z0-9]+'
-str_abbr_list = r'|'.join([str_weekday, str_h_o, str_r_o, str_with, str_time, str_am_pm, str_s_p, str_sust_rel, str_sig])
-str_abbrev   = r'(?i:(?P<abbrev>({abbr_list})))'.format(abbr_list=str_abbr_list)
-#regex_abbrev = re.compile(str_abbrev, re.IGNORECASE)
-
-# gender
-#str_gender   = r'(?i:(?P<gender>\b(sex|gender)\s*:\s*(male|female|m\.?|f\.?)))'
-#regex_gender = re.compile(str_gender, re.IGNORECASE)
-
-expr_list = [str_abbrev,
-				str_vitals,
-				str_caps_header,
-				str_anon,
-				str_contrast,
-				str_fov,
-				str_prescription]
-			
-expr = r'|'.join(expr_list)
-regex = re.compile(expr, max_mem=(300 << 20))
-
 regex_multi_space = re.compile(r' +')
 regex_multi_newline = re.compile(r'\n+')
 
-###############################################################################
-def enable_debug():
-	global TRACE
-	TRACE = True
-
-
-###############################################################################
-def disable_debug():
-	global TRACE
-	TRACE = False
-
-###############################################################################
-def remove_newlines(text):
+def remove_newlines(document):
 
 		# replace newline with space
-		no_newlines = regex_multi_newline.sub(' ', text)
+		no_newlines = regex_multi_newline.sub(' ', document)
 
 		# replace multiple consecutive spaces with single space
-		cleaned_text = regex_multi_space.sub(' ', no_newlines)
-		return cleaned_text
+		cleaned_document = regex_multi_space.sub(' ', no_newlines)
+		return cleaned_document
 
-###############################################################################
 def generate_token(base_name, mo, mode):
 	
 	if mode == 0:
@@ -230,42 +377,25 @@ def generate_token(base_name, mo, mode):
 			return '{0}_{1}'.format(base_name, hashlib.md5(mo.group('anon').encode()).hexdigest())
 		else:
 			return base_name
+			
+def merge_anon_tokens(doc):
+	matches = regex_anon.finditer(doc.text)
+	if matches == None:
+		return doc
+	for mo in matches:
+		if doc.merge(mo.start(), mo.end()) == None:
+			print(mo.string[mo.start():mo.end()])
+	return doc
 
 def do_substitutions(document, mode):
-
-	subs = {}
-
-	token_counter = 0
-	contrast_counter = 0
-	fov_counter = 0
-	prescription_counter = 0
-	vitals_counter = 0
-	abbrev_counter = 0
 	
 	def repl(mo):
 		
 		nonlocal mode
 	
-		nonlocal token_counter
-		nonlocal contrast_counter
-		nonlocal fov_counter
-		nonlocal prescription_counter
-		nonlocal vitals_counter
-		nonlocal abbrev_counter
-	
 		text = mo.string[mo.start():mo.end()]
 	
-		if mo.group('abbrev'):
-			abbrev_counter += 1
-			replacement = 'ABBREV{0}'.format(abbrev_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		elif mo.group('vitals'):
-			vitals_counter += 1
-			replacement = 'VITALS{0}'.format(vitals_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		elif mo.group('anon') and mo.group('anon_date'):
+		if mo.group('anon') and mo.group('anon_date'):
 			return mo.group('anon_date').replace('/', '').replace('-', '/')
 		elif mo.group('anon') and mo.group('anon_first_name'):
 			return generate_token(FIRST_NAME_TOKEN, mo, mode)
@@ -337,33 +467,11 @@ def do_substitutions(document, mode):
 			return generate_token(PROVIDER_NUMBER_TOKEN, mo, mode)
 		elif mo.group('anon'):
 			return generate_token(ANONTOKEN, mo, mode)
-		elif mo.group('contrast'):
-			contrast_counter += 1
-			replacement = 'CONTRAST{0}'.format(contrast_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		elif mo.group('fov'):
-			fov_counter += 1
-			replacement = 'FOV{0}'.format(fov_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		elif mo.group('prescription'):
-			prescription_counter += 1
-			replacement = 'PRESCRIPTION{0}'.format(prescription_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
-		else:
-			token_counter += 1
-			replacement = 'TOKEN{0}'.format(token_counter)
-			subs[replacement] = text
-			return ' {0} '.format(replacement)
 
-	document = remove_newlines(document)
 	document = regex.sub(repl, document)
 
-	return (document, subs)
+	return (document)
 
-###############################################################################
 def erase_spans(report, span_list):
 	"""
 	Erase all report chars bounded by each [start, end) span.
@@ -382,8 +490,6 @@ def erase_spans(report, span_list):
 
 	return report
 
-
-###############################################################################
 def cleanup_report(report):
 
 	# remove (Over) ... (Cont) inserts
@@ -436,8 +542,6 @@ def cleanup_report(report):
 	
 	return report
 	
-
-###############################################################################
 def fixup_sentences(sentence_list):
 	"""
 	Move punctuation from one sentence to another, if necessary.
@@ -456,7 +560,6 @@ def fixup_sentences(sentence_list):
 		i += 1
 	return sentence_list
 
-###############################################################################
 def split_section_headers(sentence_list):
 	"""
 	Put an all caps section header in a separate sentence from the subsequent
@@ -491,7 +594,6 @@ def split_section_headers(sentence_list):
 	#return sentences
 		
 
-###############################################################################
 def split_concatenated_sentences(sentence_list):
 
 	#sentences = []
@@ -516,51 +618,50 @@ def delete_junk(sentence_list):
 	"""
 	"""
 
-	#sentences = []
+	sentences = []
 	num = len(sentence_list)
 
-	#for s in sentence_list:
-	i = 0
-	while i < num:
-		s = sentence_list[i]
+	for s in sentence_list:
+		i = 0
+		while i < num:
+			s = sentence_list[i]
 
-		# delete any remaining list numbering
-		match = regex_list_start.match(s)
-		if match:
-			s = s[match.end():]
+			# delete any remaining list numbering
+			match = regex_list_start.match(s)
+			if match:
+				s = s[match.end():]
 
-		# remove any sentences that consist of just '1.', '2.', etc.
-		match = re.match(r'\A\s*\d+(\.|\))\s*\Z', s)
-		if match:
-			i += 1
-			continue
-
-		# remove any sentences that consist of '#1', '#2', etc.
-		match = re.match(r'\A\s*#\d+\s*\Z', s)
-		if match:
-			i += 1
-			continue
-
-		# remove any sentences consisting entirely of symbols
-		match = re.match(r'\A\s*[^a-zA-Z0-9]+\s*\Z', s)
-		if match:
-			i += 1
-			continue
-
-		# merge isolated age + year
-		if i < num-1:
-			if s.isdigit() and sentence_list[i+1].startswith('y'):
-				s = s + ' ' + sentence_list[i+1]
+			# remove any sentences that consist of just '1.', '2.', etc.
+			match = re.match(r'\A\s*\d+(\.|\))\s*\Z', s)
+			if match:
 				i += 1
+				continue
 
-		# if next sentence starts with 'now measures', merge with current
-		if i < num-1:
-			if sentence_list[i+1].startswith('now measures'):
-				s = s + ' ' + sentence_list[i+1]
+			# remove any sentences that consist of '#1', '#2', etc.
+			match = re.match(r'\A\s*#\d+\s*\Z', s)
+			if match:
 				i += 1
+				continue
 
-		#sentences.append(s)
-		yield s
-		i += 1
+			# remove any sentences consisting entirely of symbols
+			match = re.match(r'\A\s*[^a-zA-Z0-9]+\s*\Z', s)
+			if match:
+				i += 1
+				continue
 
-	#return sentences
+			# merge isolated age + year
+			if i < num-1:
+				if s.isdigit() and sentence_list[i+1].startswith('y'):
+					s = s + ' ' + sentence_list[i+1]
+					i += 1
+
+			# if next sentence starts with 'now measures', merge with current
+			if i < num-1:
+				if sentence_list[i+1].startswith('now measures'):
+					s = s + ' ' + sentence_list[i+1]
+					i += 1
+
+			sentences.append(s)
+			i += 1
+
+	return sentences

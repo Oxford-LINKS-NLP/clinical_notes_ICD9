@@ -1,5 +1,5 @@
 import pandas as pd
-from clarityNLP.segmentation import Tokenizer
+from tokenizer.tokenizer import Tokenizer
 import sys
 import os
 import ndjson
@@ -24,7 +24,7 @@ MODE = 2
 def process_batch(notes_batch, i, tokenizer, notes_tokenized_file):
 	print('processing batch {0}, batchsize {1}'.format(i, batch_size))
 
-	documents = tokenizer.tokenize_documents(notes_batch['TEXT'])
+	documents = tokenizer.tokenize_documents_test(notes_batch['TEXT'])
 	n_tokens = [sum(len(sentence) for sentence in doc) for doc in documents]
 	rows = list(zip(notes_batch['HADM_ID'].fillna(-1).astype('int32'), notes_batch['SUBJECT_ID'], notes_batch['CATEGORY'], notes_batch['DESCRIPTION'], notes_batch['ISERROR'].fillna(0).astype(bool), n_tokens, documents))
 	#print('\n'.join(token for doc in documents for sentence in doc for token in sentence))
