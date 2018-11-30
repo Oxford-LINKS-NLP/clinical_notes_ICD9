@@ -8,15 +8,9 @@ from spacy.attrs import ORTH
 #https://en.wikipedia.org/wiki/List_of_abbreviations_used_in_medical_prescriptions
 #https://en.wikipedia.org/wiki/List_of_medical_abbreviations:_Latin_abbreviations
 
-#pattern1 -> tok. tok.
-#pattern2 -> tok tok.
-
-abbrev_composite_pattern2 = ['ad lib.'
-										'ad us.'
-										'bis ind.'
-										'ex aq.'
-										'non rep.'
-										]
+#pattern1 -> tok.tok. | tok. | tok.tok.tok.
+#pattern2 -> tok. tok.
+#pattern3 -> tok tok.
 
 #'d. in p. ae.'
 #'si op. sit'
@@ -24,225 +18,250 @@ abbrev_composite_pattern2 = ['ad lib.'
 #vitals
 #Temp.
 #measure units
+
+abbrev_pattern1 = ['a.c.',
+						'a.c.h.s.',
+						'ac&hs',
+						'a.d.',
+						'ad.',
+						'add.',
+						'admov.',
+						'aeq.',
+						'agit.',
+						'amp.',
+						'aq.',
+						'a.l.',
+						'a.s.',
+						'a.u.',
+						'b.d.s.',
+						'bib.',
+						'b.i.d.',
+						'b.d.',
+						'bol.',
+						'Ph.Br.',
+						'b.t.',
+						'bucc.',
+						'cap.',
+						'caps.',
+						'c.m.',
+						'c.m.s.',
+						'c.',
+						'cib.',
+						'c.c.',
+						'cf.',
+						'c.n.',
+						'cochl.',
+						'colet.',
+						'comp.',
+						'contin.',
+						'cpt.',
+						'cr.',
+						'cuj.',
+						'c.v.',
+						'cyath.',
+						'd.',
+						'D/C',
+						'decoct.',
+						'det.',
+						'dil.',
+						'dim.',
+						'disp.',
+						'div.',
+						'd.t.d. .',
+						'elix.',
+						'e.m.p.',
+						'emuls.',
+						'exhib.',
+						'f.',
+						'f.h.',
+						'fl.',
+						'fld.',
+						'f.m.',
+						'f.s.a.',
+						'ft.',
+						'garg.',
+						'gr.',
+						'gtt.',
+						'gutt.',
+						'h.',
+						'H/O',
+						'hor.',
+						'habt.',
+						'h.s.',
+						'inj.',
+						'i.m.',
+						'inf.',
+						'i.v.',
+						'i.v.p.',
+						'lb.',
+						'l.c.d.',
+						'liq.',
+						'lot.',
+						'M.',
+						'm.',
+						'max.',
+						'm.d.u.',
+						'mg/dL',
+						'min.',
+						'mist.',
+						'mit.',
+						'mitt.',
+						'nebul.',
+						'neb.',
+						'noct.',
+						'n.p.o.',
+						'1/2NS.',
+						'o.d.',
+						'o.m.',
+						'o.n.',
+						'o.s.',
+						'o.u.',
+						'p.',
+						'p.c.',
+						'p.c.h.s.',
+						'pc&hs',
+						'Ph.Br.',
+						'Ph.Eur.',
+						'Ph.Int.',
+						'pig.',
+						'pigm.',
+						'p.o.',
+						'ppt.',
+						'p.r.',
+						'p.r.n.',
+						'pt.',
+						'pulv.',
+						'p.v.',
+						'q.1.d.',
+						'q.1.h.',
+						'q.2.h.',
+						'q.4.h.',
+						'q.6.h.',
+						'q.8.h.',
+						'q.a.d.',
+						'q.a.m.',
+						'q.d.',
+						'q.d.a.m.',
+						'q.d.p.m.',
+						'q.d.s.',
+						'q.p.m.',
+						'q.h.',
+						'q.h.s.',
+						'q.i.d.',
+						'q.l.',
+						'q.n.',
+						'q.o.d.',
+						'q.p.m.',
+						'q.q.',
+						'q.q.h.',
+						'q.s.',
+						'q.v.',
+						'rel.',
+						'Rel.',
+						'rep.',
+						'rept.',
+						'R/L',
+						'rep.',
+						's.',
+						's.a.',
+						'sem.',
+						's.i.d.',
+						'Sig.',
+						'S.',
+						'sig.',
+						'sing.',
+						's.l.',
+						'sol.',
+						's.o.s.',
+						's.s.',
+						'st.',
+						'Stat.',
+						'sum.',
+						'supp.',
+						'susp.',
+						'Sust.Rel.'
+						'sust.Rel.'
+						'Sust.rel.',
+						'sust.rel.',
+						'Sust.',
+						'sust',
+						'syr.',
+						'tab.',
+						'tal.',
+						't.',
+						't.d.s.',
+						't.i.d.',
+						't.d.',
+						't.d.s.',
+						'tinct.',
+						't.i.d.',
+						't.i.w.',
+						'top.',
+						'tinc.',
+						'tinct.',
+						'trit.',
+						'troch.',
+						'u.d.',
+						'ut.',
+						'dict.',
+						'ung.',
+						'vag.',
+						'w/a',
+						'w/f',
+						'w/o',
+						'y.o.'
+						]
 		
-abbrev_composite_pattern1 = ['alt. d.'
-										'alt. dieb.'
-										'alt. h.'
-										'alt. hor.'
-										'aq. bull.'
-										'aq. com.'
-										'aq. dest.'
-										'aq. ferv.'
-										'cochl. ampl.'
-										'cochl. infant.'
-										'cochl. mag.'
-										'cochl. mod.'
-										'cochl. parv.'
-										'cyath. vinos.'
-										'dieb. alt.'
-										'f. pil.'
-										'hor. alt.'
-										'hor. decub.'
-										'hor. intermed.'
-										'hor. tert.'
-										'lat. dol.'
-										'mod. praescript.'
-										'omn. bih.'
-										'omn. hor.'
-										'part. aeq.'
-										]
+abbrev_pattern2 = ['alt. d.',
+						'alt. dieb.',
+						'alt. h.',
+						'alt. hor.',
+						'aq. bull.',
+						'aq. com.',
+						'aq. dest.',
+						'aq. ferv.',
+						'cochl. ampl.',
+						'cochl. infant.',
+						'cochl. mag.',
+						'cochl. mod.',
+						'cochl. parv.',
+						'cyath. vinos.',
+						'dieb. alt.',
+						'f. pil.',
+						'hor. alt.',
+						'hor. decub.',
+						'hor. intermed.',
+						'hor. tert.',
+						'lat. dol.',
+						'mod. praescript.',
+						'omn. bih.',
+						'omn. hor.',
+						'part. aeq.'
+						]
+										
+abbrev_pattern3 = ['ad lib.',
+						'ad us.',
+						'bis ind.',
+						'ex aq.',
+						'non rep.'
+						]
 										
 def generate_matcher_pattern1():
-	for abbrev in abbrev_composite_pattern1:
+	for abbrev in abbrev_pattern1:
+		yield (abbrev, [{ORTH: abbrev}])
+										
+def generate_matcher_pattern2():
+	for abbrev in abbrev_pattern2:
 		w1, w2 = [w.strip() for w in abbrev.split('.')][:2]
 		yield ('{}_{}_1'.format(w1, w2), [{ORTH: w1}, {ORTH: '.'}, {ORTH: w2}, {ORTH: '.'}])
 		yield ('{}_{}_2'.format(w1, w2), [{ORTH: w1+'.'}, {ORTH: w2}, {ORTH: '.'}])
 		yield ('{}_{}_3'.format(w1, w2), [{ORTH: w1}, {ORTH: '.'}, {ORTH: w2+'.'}])
-
-abbrev_list = {'a.c.': [{ORTH: 'a.c.'}],
-					'a.c.h.s.': [{ORTH: 'a.c.h.s.'}],
-					'ac&hs': [{ORTH: 'ac&hs'}],
-					'a.d.': [{ORTH: 'a.d.'}],
-					'ad.': [{ORTH: 'ad.'}],
-					'add.': [{ORTH: 'add.'}],
-					'admov.': [{ORTH: 'admov.'}],
-					'aeq.': [{ORTH: 'aeq.'}],
-					'agit.': [{ORTH: 'agit.'}],
-					'amp.': [{ORTH: 'amp.'}],
-					'aq.': [{ORTH: 'aq.'}],
-					'a.l.': [{ORTH: 'a.l.'}],
-					'a.s.': [{ORTH: 'a.s.'}],
-					'a.u.': [{ORTH: 'a.u.'}],
-					'b.d.s.': [{ORTH: 'b.d.s.'}],
-					'bib.': [{ORTH: 'bib.'}],
-					'b.i.d.': [{ORTH: 'b.i.d.'}],
-					'b.d.': [{ORTH: 'b.d.'}],
-					'bol.': [{ORTH: 'bol.'}],
-					'Ph.Br.': [{ORTH: 'Ph.Br.'}],
-					'b.t.': [{ORTH: 'b.t.'}],
-					'bucc.': [{ORTH: 'bucc.'}],
-					'cap.': [{ORTH: 'cap.'}],
-					'caps.': [{ORTH: 'caps.'}],
-					'c.m.': [{ORTH: 'c.m.'}],
-					'c.m.s.': [{ORTH: 'c.m.s.'}],
-					'c.': [{ORTH: 'c.'}],
-					'cib.': [{ORTH: 'cib.'}],
-					'c.c.': [{ORTH: 'c.c.'}],
-					'cf.': [{ORTH: 'cf.'}],
-					'c.n.': [{ORTH: 'c.n.'}],
-					'cochl.': [{ORTH: 'cochl.'}],
-					'colet.': [{ORTH: 'colet.'}],
-					'comp.': [{ORTH: 'comp.'}],
-					'contin.': [{ORTH: 'contin.'}],
-					'cpt.': [{ORTH: 'cpt.'}],
-					'cr.': [{ORTH: 'cr.'}],
-					'cuj.': [{ORTH: 'cuj.'}],
-					'c.v.': [{ORTH: 'c.v.'}],
-					'cyath.': [{ORTH: 'cyath.'}],
-					'd.': [{ORTH: 'd.'}],
-					'D/C': [{ORTH: 'D/C'}],
-					'decoct.': [{ORTH: 'decoct.'}],
-					'det.': [{ORTH: 'det.'}],
-					'dil.': [{ORTH: 'dil.'}],
-					'dim.': [{ORTH: 'dim.'}],
-					'disp.': [{ORTH: 'disp.'}],
-					'div.': [{ORTH: 'div.'}],
-					'd.t.d. .': [{ORTH: 'd.t.d. .'}],
-					'elix.': [{ORTH: 'elix.'}],
-					'e.m.p.': [{ORTH: 'e.m.p.'}],
-					'emuls.': [{ORTH: 'emuls.'}],
-					'exhib.': [{ORTH: 'exhib.'}],
-					'f.': [{ORTH: 'f.'}],
-					'f.h.': [{ORTH: 'f.h.'}],
-					'fl.': [{ORTH: 'fl.'}],
-					'fld.': [{ORTH: 'fld.'}],
-					'f.m.': [{ORTH: 'f.m.'}],
-					'f.s.a.': [{ORTH: 'f.s.a.'}],
-					'ft.': [{ORTH: 'ft.'}],
-					'garg.': [{ORTH: 'garg.'}],
-					'gr.': [{ORTH: 'gr.'}],
-					'gtt.': [{ORTH: 'gtt.'}],
-					'gutt.': [{ORTH: 'gutt.'}],
-					'h.': [{ORTH: 'h.'}],
-					'H/O': [{ORTH: 'H/O'}],
-					'hor.': [{ORTH: 'hor.'}],
-					'habt.': [{ORTH: 'habt.'}],
-					'h.s.': [{ORTH: 'h.s.'}],
-					'inj.': [{ORTH: 'inj.'}],
-					'i.m.': [{ORTH: 'i.m.'}],
-					'inf.': [{ORTH: 'inf.'}],
-					'i.v.': [{ORTH: 'i.v.'}],
-					'i.v.p.': [{ORTH: 'i.v.p.'}],
-					'lb.': [{ORTH: 'lb.'}],
-					'l.c.d.': [{ORTH: 'l.c.d.'}],
-					'liq.': [{ORTH: 'liq.'}],
-					'lot.': [{ORTH: 'lot.'}],
-					'M.': [{ORTH: 'M.'}],
-					'm.': [{ORTH: 'm.'}],
-					'max.': [{ORTH: 'max.'}],
-					'm.d.u.': [{ORTH: 'm.d.u.'}],
-					'mg/dL': [{ORTH: 'mg/dL'}],
-					'min.': [{ORTH: 'min.'}],
-					'mist.': [{ORTH: 'mist.'}],
-					'mit.': [{ORTH: 'mit.'}],
-					'mitt.': [{ORTH: 'mitt.'}],
-					'nebul.': [{ORTH: 'nebul.'}],
-					'neb.': [{ORTH: 'neb.'}],
-					'noct.': [{ORTH: 'noct.'}],
-					'n.p.o.': [{ORTH: 'n.p.o.'}],
-					'1/2NS.': [{ORTH: '1/2NS.'}],
-					'o.d.': [{ORTH: 'o.d.'}],
-					'o.m.': [{ORTH: 'o.m.'}],
-					'o.n.': [{ORTH: 'o.n.'}],
-					'o.s.': [{ORTH: 'o.s.'}],
-					'o.u.': [{ORTH: 'o.u.'}],
-					'p.': [{ORTH: 'p.'}],
-					'p.c.': [{ORTH: 'p.c.'}],
-					'p.c.h.s.': [{ORTH: 'p.c.h.s.'}],
-					'pc&hs': [{ORTH: 'pc&hs'}],
-					'Ph.Br.': [{ORTH: 'Ph.Br.'}],
-					'Ph.Eur.': [{ORTH: 'Ph.Eur.'}],
-					'Ph.Int.': [{ORTH: 'Ph.Int.'}],
-					'pig.': [{ORTH: 'pig.'}],
-					'pigm.': [{ORTH: 'pigm.'}],
-					'p.o.': [{ORTH: 'p.o.'}],
-					'ppt.': [{ORTH: 'ppt.'}],
-					'p.r.': [{ORTH: 'p.r.'}],
-					'p.r.n.': [{ORTH: 'p.r.n.'}],
-					'pt.': [{ORTH: 'pt.'}],
-					'pulv.': [{ORTH: 'pulv.'}],
-					'p.v.': [{ORTH: 'p.v.'}],
-					'q.1.d.': [{ORTH: 'q.1.d.'}],
-					'q.1.h.': [{ORTH: 'q.1.h.'}],
-					'q.2.h.': [{ORTH: 'q.2.h.'}],
-					'q.4.h.': [{ORTH: 'q.4.h.'}],
-					'q.6.h.': [{ORTH: 'q.6.h.'}],
-					'q.8.h.': [{ORTH: 'q.8.h.'}],
-					'q.a.d.': [{ORTH: 'q.a.d.'}],
-					'q.a.m.': [{ORTH: 'q.a.m.'}],
-					'q.d.': [{ORTH: 'q.d.'}],
-					'q.d.a.m.': [{ORTH: 'q.d.a.m.'}],
-					'q.d.p.m.': [{ORTH: 'q.d.p.m.'}],
-					'q.d.s.': [{ORTH: 'q.d.s.'}],
-					'q.p.m.': [{ORTH: 'q.p.m.'}],
-					'q.h.': [{ORTH: 'q.h.'}],
-					'q.h.s.': [{ORTH: 'q.h.s.'}],
-					'q.i.d.': [{ORTH: 'q.i.d.'}],
-					'q.l.': [{ORTH: 'q.l.'}],
-					'q.n.': [{ORTH: 'q.n.'}],
-					'q.o.d.': [{ORTH: 'q.o.d.'}],
-					'q.p.m.': [{ORTH: 'q.p.m.'}],
-					'q.q.': [{ORTH: 'q.q.'}],
-					'q.q.h.': [{ORTH: 'q.q.h.'}],
-					'q.s.': [{ORTH: 'q.s.'}],
-					'q.v.': [{ORTH: 'q.v.'}],
-					'rep.': [{ORTH: 'rep.'}],
-					'rept.': [{ORTH: 'rept.'}],
-					'R/L': [{ORTH: 'R/L'}],
-					'rep.': [{ORTH: 'rep.'}],
-					's.': [{ORTH: 's.'}],
-					's.a.': [{ORTH: 's.a.'}],
-					'sem.': [{ORTH: 'sem.'}],
-					's.i.d.': [{ORTH: 's.i.d.'}],
-					'Sig.': [{ORTH: 'Sig.'}],
-					'S.': [{ORTH: 'S.'}],
-					'sig.': [{ORTH: 'sig.'}],
-					'sing.': [{ORTH: 'sing.'}],
-					's.l.': [{ORTH: 's.l.'}],
-					'sol.': [{ORTH: 'sol.'}],
-					's.o.s.': [{ORTH: 's.o.s.'}],
-					's.s.': [{ORTH: 's.s.'}],
-					'st.': [{ORTH: 'st.'}],
-					'Stat.': [{ORTH: 'Stat.'}],
-					'sum.': [{ORTH: 'sum.'}],
-					'supp.': [{ORTH: 'supp.'}],
-					'susp.': [{ORTH: 'susp.'}],
-					'syr.': [{ORTH: 'syr.'}],
-					'tab.': [{ORTH: 'tab.'}],
-					'tal.': [{ORTH: 'tal.'}],
-					't.': [{ORTH: 't.'}],
-					't.d.s.': [{ORTH: 't.d.s.'}],
-					't.i.d.': [{ORTH: 't.i.d.'}],
-					't.d.': [{ORTH: 't.d.'}],
-					't.d.s.': [{ORTH: 't.d.s.'}],
-					'tinct.': [{ORTH: 'tinct.'}],
-					't.i.d.': [{ORTH: 't.i.d.'}],
-					't.i.w.': [{ORTH: 't.i.w.'}],
-					'top.': [{ORTH: 'top.'}],
-					'tinc.': [{ORTH: 'tinc.'}],
-					'tinct.': [{ORTH: 'tinct.'}],
-					'trit.': [{ORTH: 'trit.'}],
-					'troch.': [{ORTH: 'troch.'}],
-					'u.d.': [{ORTH: 'u.d.'}],
-					'ut.': [{ORTH: 'ut.'}],
-					'dict.': [{ORTH: 'dict.'}],
-					'ung.': [{ORTH: 'ung.'}],
-					'vag.': [{ORTH: 'vag.'}],
-					'w/a': [{ORTH: 'w/a'}],
-					'w/f': [{ORTH: 'w/f'}],
-					'w/o': [{ORTH: 'w/o'}],
-					'y.o.': [{ORTH: 'y.o.'}],
-					}
+		
+def generate_matcher_pattern3():
+	for abbrev in abbrev_pattern3:
+		w1, w2 = [w.strip() for w in abbrev.split(' ')]
+		w2 = w2.strip('.')
+		yield ('{}_{}_1'.format(w1, w2), [{ORTH: w1}, {ORTH: w2}, {ORTH: '.'}])
 
 ANONTOKEN = 'ANONTOKEN'
 FIRST_NAME_TOKEN = 'FIRSTNAMETOKEN'
@@ -387,14 +406,16 @@ def merge_anon_tokens(doc):
 			print(mo.string[mo.start():mo.end()])
 	return doc
 
-def do_substitutions(document, mode):
+def do_substitutions(anon_token):
+
+	mode = 2
 	
 	def repl(mo):
 		
 		nonlocal mode
 	
 		text = mo.string[mo.start():mo.end()]
-	
+		
 		if mo.group('anon') and mo.group('anon_date'):
 			return mo.group('anon_date').replace('/', '').replace('-', '/')
 		elif mo.group('anon') and mo.group('anon_first_name'):
@@ -468,7 +489,7 @@ def do_substitutions(document, mode):
 		elif mo.group('anon'):
 			return generate_token(ANONTOKEN, mo, mode)
 
-	document = regex.sub(repl, document)
+	document = regex_anon.sub(repl, anon_token)
 
 	return (document)
 
@@ -560,38 +581,19 @@ def fixup_sentences(sentence_list):
 		i += 1
 	return sentence_list
 
-def split_section_headers(sentence_list):
+def split_section_headers(doc):
 	"""
 	Put an all caps section header in a separate sentence from the subsequent
 	text.
 	"""
 
-	#sentences = []
-	for s in sentence_list:
-		subs = []
-		iterator = regex_caps_header.finditer(s)
-		for match in iterator:
-			subs.append( (match.start(), match.end()) )
-		if len(subs) > 0:
-			prev_end = 0
-			for start, end in subs:
-				before = s[prev_end:start].strip()
-				header = s[start:end].strip()
-				prev_end = end
-				if len(before) > 0:
-					#sentences.append(before)
-					yield(before)
-				#sentences.append(header)
-				yield header
-			after = s[prev_end:].strip()
-			if len(after) > 0:
-				#sentences.append(after)
-				yield after
-		else:
-			#sentences.append(s)
-			yield s
+	matches = regex_caps_header.finditer(doc[:-2].text)
+	
+	for mo in matches:
+		print(mo.string[mo.start():mo.end()])
+		doc[mo.end()+1].sent_start = True
 
-	#return sentences
+	return doc
 		
 
 def split_concatenated_sentences(sentence_list):
