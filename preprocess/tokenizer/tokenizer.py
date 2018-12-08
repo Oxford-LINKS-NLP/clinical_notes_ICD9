@@ -41,7 +41,7 @@ class Tokenizer(object):
 		
 		def on_match_pattern2(matcher, doc, id, matches):
 			for match_id, start, end in matches:
-				#string_id = self.nlp.vocab.strings[match_id]
+				string_id = self.nlp.vocab.strings[match_id]
 				n_tokens = end-start
 				if n_tokens == 4:
 					span1 = doc[start:start+2]
@@ -59,7 +59,7 @@ class Tokenizer(object):
 		def on_match_pattern3(matcher, doc, id, matches):
 			for match_id, start, end in matches:
 				#string_id = self.nlp.vocab.strings[match_id]
-				span = doc[start+1:]
+				span = doc[start+1:end]
 				span.merge()
 		
 		for id, pattern in tokenizer_utils.generate_matcher_pattern2():
@@ -86,11 +86,7 @@ class Tokenizer(object):
 		documents = (tokenizer_utils.cleanup_report(doc) for doc in documents)
 		documents = (tokenizer_utils.merge_anon_tokens(doc) for doc in self.nlp.pipe(documents, n_threads=self.n_threads, batch_size=self.batch_size))
 
-		docs = []
-		for doc in documents:
-			sentences = [[str.lower(tokenizer_utils.do_substitutions(word.text)).strip(' :-').replace(' ', '_') for word in sentence if not word.is_punct and not word.is_space] for sentence in doc.sents]
-			print(sentences)
-			docs.append(sentences)
+		docs = [[[str.lower(tokenizer_utils.do_substitutions(word.text)).strip(' :-').replace(' ', '_') for word in sentence if not word.is_punct and not word.is_space] for sentence in doc.sents] for doc in documents]
 		
 		#for document in documents:
 		#	sentences = (sent.string.strip() for sent in document.sents)
