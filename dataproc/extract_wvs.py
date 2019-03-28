@@ -57,20 +57,38 @@ def save_embeddings(W, words, outfile):
             line.extend([str(d) for d in W[i]])
             o.write(" ".join(line) + "\n")
 
-def load_embeddings(embed_file):
+def load_embeddings(embed_file, ind2w, embed_size, embed_normalize):
     #also normalizes the embeddings
-    W = []
+    word_embeddings = {}
+    vocab_size = len(ind2w)
+    
     with open(embed_file) as ef:
         for line in ef:
             line = line.rstrip().split()
-            vec = np.array(line[1:]).astype(np.float)
-            vec = vec / (np.linalg.norm(vec) + 1e-6)
-            W.append(vec)
-        #UNK embedding, gaussian randomly initialized 
-        print("adding unk embedding")
-        vec = np.random.randn(len(W[-1]))
-        vec = vec / (np.linalg.norm(vec) + 1e-6)
-        W.append(vec)
-    W = np.array(W)
+            idx = len(line) - embed_size
+            word = '_'.join(line[:idx]).lower().strip()
+            vec = np.array(line[idx:]).astype(np.float)
+            word_embeddings[word] = vec
+
+    W = np.zeros((vocab_size+2, embed_size))
+    words_found = 0
+    
+    for ind, word in ind2w.items():
+
+        try: 
+            W[ind] = word_embeddings[word]
+            words_found += 1
+        except KeyError:
+            W[ind] = np.random.randn(1, embed_size)
+        if embed_normalize:
+            W[ind] = W[ind] / (np.linalg.norm(W[ind]) + 1e-6)
+
+    W[vocab_size-1] = np.random.randn(1, embed_size)
+    
+    if embed_normalize:
+        W[vocab_size-1] = W[vocab_size-1] / (np.linalg.norm(W[vocab_size-1]) + 1e-6)
+
+    print('vocabulary coverage: {}'.format(words_found/vocab_size))
+    
     return W
 

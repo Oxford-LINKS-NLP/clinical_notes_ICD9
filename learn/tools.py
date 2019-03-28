@@ -16,54 +16,51 @@ import datasets
 import persistence
 import numpy as np
 
+from dataproc.extract_wvs import load_embeddings
+
 def pick_model(args, dicts):
     """
         Use args to initialize the appropriate model
     """
+
     Y = len(dicts['ind2c'])
+    Y_coarse = len(dicts['ind2c_coarse']) if args.hier else None
+    
+    if args.embed_file and not args.test_model:
+        print("loading pretrained embeddings (trainable={0}, normalize={1})...".format(args.embed_trainable, args.embed_normalize))            
+        word_embeddings_matrix = load_embeddings(args.embed_file, dicts['ind2w'], args.embed_size, args.embed_normalize)
+    else:
+        word_embeddings_matrix = None
+        
+    vocab_size = len(dicts['ind2w'])
+                    
     if args.model == "rnn":
-        model = models.VanillaRNN(Y, args.embed_file, dicts, args.rnn_dim, args.cell_type, args.rnn_layers, args.gpu, args.embed_size,
-                                  args.bidirectional)
+        model = models.VanillaRNN(Y, word_embeddings_matrix, vocab_size, args.rnn_dim, args.cell_type, args.rnn_layers, args.gpu, args.embed_size,
+                                  args.bidirectional, embed_trainable=args.embed_trainable)
+    elif args.model == "dummy":
+        model = models.DummyModel(Y, dicts, args.gpu)
     elif args.model == "cnn_vanilla":
         filter_size = int(args.filter_size)
-        model = models.VanillaConv(Y, args.embed_file, filter_size, args.num_filter_maps, args.gpu, dicts, args.embed_size, args.dropout)
+        model = models.VanillaConv(Y, word_embeddings_matrix, filter_size, args.num_filter_maps, args.gpu, vocab_size, args.embed_size, args.dropout,
+                                   embed_trainable=args.embed_trainable)
     elif args.model == "conv_attn":
         filter_size = int(args.filter_size)
-        model = models.ConvAttnPool(Y, args.embed_file, filter_size, args.num_filter_maps, args.lmbda, args.gpu, dicts,
-                                    embed_size=args.embed_size, dropout=args.dropout)
+        model = models.ConvAttnPool(Y, word_embeddings_matrix, filter_size, args.num_filter_maps, args.gpu, vocab_size,
+                                    embed_size=args.embed_size, embed_trainable=args.embed_trainable, dropout=args.dropout, hier=args.hier, Y_coarse=Y_coarse, embed_desc=args.embed_desc, layer_norm=args.layer_norm, fine2coarse=dicts['fine2coarse'])
+    elif args.model == "conv_attn_old":
+        filter_size = int(args.filter_size)
+        model = models.ConvAttnPool_old(Y, word_embeddings_matrix, filter_size, args.num_filter_maps, args.gpu, vocab_size,
+                                    embed_size=args.embed_size, embed_trainable=args.embed_trainable, dropout=args.dropout)
+    elif args.model == "hier_conv_attn":
+        model = models.HierarchicalConvAttn(Y, word_embeddings_matrix,
+                                    args.filter_size_words, args.num_filter_maps_words, args.filter_size_sents, args.num_filter_maps_sents,
+                                    args.gpu, vocab_size, embed_size=args.embed_size, embed_trainable=args.embed_trainable, dropout_words=args.dropout, dropout_sents=args.dropout_sents, hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'], layer_norm=args.layer_norm, embed_desc=args.embed_desc)
+
     if args.test_model:
-        sd = torch.load(args.test_model)
+        sd = torch.load(os.path.abspath(args.test_model))
         model.load_state_dict(sd)
+
     if args.gpu:
         model.cuda()
+
     return model
-
-def make_param_dict(args):
-    """
-        Make a list of parameters to save for future reference
-    """
-    param_vals = [args.Y, args.filter_size, args.dropout, args.num_filter_maps, args.rnn_dim, args.cell_type, args.rnn_layers, 
-                  args.lmbda, args.command, args.weight_decay, args.version, args.data_path, args.vocab, args.embed_file, args.lr]
-    param_names = ["Y", "filter_size", "dropout", "num_filter_maps", "rnn_dim", "cell_type", "rnn_layers", "lmbda", "command",
-                   "weight_decay", "version", "data_path", "vocab", "embed_file", "lr"]
-    params = {name:val for name, val in zip(param_names, param_vals) if val is not None}
-    return params
-
-def build_code_vecs(code_inds, dicts):
-    """
-        Get vocab-indexed arrays representing words in descriptions of each *unseen* label
-    """
-    code_inds = list(code_inds)
-    ind2w, ind2c, dv_dict = dicts['ind2w'], dicts['ind2c'], dicts['dv']
-    vecs = []
-    for c in code_inds:
-        code = ind2c[c]
-        if code in dv_dict.keys():
-            vecs.append(dv_dict[code])
-        else:
-            #vec is a single UNK if not in lookup
-            vecs.append([len(ind2w) + 1])
-    #pad everything
-    vecs = datasets.pad_desc_vecs(vecs)
-    return (torch.cuda.LongTensor(code_inds), vecs)
-

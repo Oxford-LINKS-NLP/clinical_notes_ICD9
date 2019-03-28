@@ -15,7 +15,7 @@ from tqdm import tqdm
 from constants import *
 import datasets
 
-def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True):
+def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True, level= ''):
     """
         Inputs:
             yhat: binary predictions matrix 
@@ -25,18 +25,20 @@ def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True):
         Outputs:
             dict holding relevant metrics
     """
+    if level != '':
+        level  = '_' + level
     names = ["acc", "prec", "rec", "f1"]
 
     #macro
-    macro = all_macro(yhat, y)
+    macro, macro_codes = all_macro(yhat, y)
 
     #micro
     ymic = y.ravel()
     yhatmic = yhat.ravel()
     micro = all_micro(yhatmic, ymic)
 
-    metrics = {names[i] + "_macro": macro[i] for i in range(len(macro))}
-    metrics.update({names[i] + "_micro": micro[i] for i in range(len(micro))})
+    metrics = {names[i] + "_macro"  + level: macro[i] for i in range(len(macro))}
+    metrics.update({names[i] + "_micro" + level: micro[i] for i in range(len(micro))})
 
     #AUC and @k
     if yhat_raw is not None and calc_auc:
@@ -45,18 +47,26 @@ def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True):
             k = [k]
         for k_i in k:
             rec_at_k = recall_at_k(yhat_raw, y, k_i)
-            metrics['rec_at_%d' % k_i] = rec_at_k
+            metrics['rec_at_%d' % k_i + level] = rec_at_k
             prec_at_k = precision_at_k(yhat_raw, y, k_i)
-            metrics['prec_at_%d' % k_i] = prec_at_k
-            metrics['f1_at_%d' % k_i] = 2*(prec_at_k*rec_at_k)/(prec_at_k+rec_at_k)
+            metrics['prec_at_%d' % k_i + level] = prec_at_k
+            metrics['f1_at_%d' % k_i + level] = 2*(prec_at_k*rec_at_k)/(prec_at_k+rec_at_k)
 
-        roc_auc = auc_metrics(yhat_raw, y, ymic)
+        roc_auc = auc_metrics(yhat_raw, y, ymic, level=level)
         metrics.update(roc_auc)
 
-    return metrics
+    metrics_inst_list = inst_accuracy_list(yhat, y), inst_precision_list(yhat, y), inst_recall_list(yhat, y), inst_f1_list(yhat, y)
+    
+    return metrics, macro_codes, metrics_inst_list
 
 def all_macro(yhat, y):
-    return macro_accuracy(yhat, y), macro_precision(yhat, y), macro_recall(yhat, y), macro_f1(yhat, y)
+    acc, acc_codes = macro_accuracy(yhat, y)
+    prec, prec_codes = macro_precision(yhat, y)
+    rec, rec_codes = macro_recall(yhat, y)
+    f1, f1_codes = macro_f1(yhat, y)
+    macro = acc, prec, rec, f1
+    macro_codes = acc_codes, prec_codes, rec_codes, f1_codes
+    return macro, macro_codes
 
 def all_micro(yhatmic, ymic):
     return micro_accuracy(yhatmic, ymic), micro_precision(yhatmic, ymic), micro_recall(yhatmic, ymic), micro_f1(yhatmic, ymic)
@@ -67,45 +77,71 @@ def all_micro(yhatmic, ymic):
 
 def macro_accuracy(yhat, y):
     num = intersect_size(yhat, y, 0) / (union_size(yhat, y, 0) + 1e-10)
-    return np.mean(num)
+    return np.mean(num), num
 
 def macro_precision(yhat, y):
     num = intersect_size(yhat, y, 0) / (yhat.sum(axis=0) + 1e-10)
-    return np.mean(num)
+    return np.mean(num), num
 
 def macro_recall(yhat, y):
     num = intersect_size(yhat, y, 0) / (y.sum(axis=0) + 1e-10)
-    return np.mean(num)
+    return np.mean(num), num
 
 def macro_f1(yhat, y):
-    prec = macro_precision(yhat, y)
-    rec = macro_recall(yhat, y)
+    prec, prec_codes = macro_precision(yhat, y)
+    rec, rec_codes = macro_recall(yhat, y)
     if prec + rec == 0:
         f1 = 0.
     else:
         f1 = 2*(prec*rec)/(prec+rec)
-    return f1
+    f1_codes = 2*(prec_codes*rec_codes)/(prec_codes+rec_codes)
+    f1_codes[np.isnan(f1_codes)] = 0.
+    return f1, f1_codes
 
 ###################
 # INSTANCE-AVERAGED
 ###################
+
+def inst_accuracy_list(yhat, y):
+    num = intersect_size(yhat, y, 1) / union_size(yhat, y, 1)
+    num[np.isnan(num)] = 0.
+    return num
 
 def inst_precision(yhat, y):
     num = intersect_size(yhat, y, 1) / yhat.sum(axis=1)
     #correct for divide-by-zeros
     num[np.isnan(num)] = 0.
     return np.mean(num)
+    
+def inst_precision_list(yhat, y):
+    num = intersect_size(yhat, y, 1) / yhat.sum(axis=1)
+    #correct for divide-by-zeros
+    num[np.isnan(num)] = 0.
+    return num
 
 def inst_recall(yhat, y):
     num = intersect_size(yhat, y, 1) / y.sum(axis=1)
     #correct for divide-by-zeros
     num[np.isnan(num)] = 0.
     return np.mean(num)
+    
+def inst_recall_list(yhat, y):
+    num = intersect_size(yhat, y, 1) / y.sum(axis=1)
+    #correct for divide-by-zeros
+    num[np.isnan(num)] = 0.
+    return num
 
 def inst_f1(yhat, y):
     prec = inst_precision(yhat, y)
     rec = inst_recall(yhat, y)
     f1 = 2*(prec*rec)/(prec+rec)
+    return f1
+
+def inst_f1_list(yhat, y):
+    prec = inst_precision_list(yhat, y)
+    rec = inst_recall_list(yhat, y)
+    f1 = 2*(prec*rec)/(prec+rec)
+    f1[np.isnan(f1)] = 0.
     return f1
 
 ##############
@@ -149,13 +185,13 @@ def precision_at_k(yhat_raw, y, k):
 ##########################################################################
 
 def micro_accuracy(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / union_size(yhatmic, ymic, 0)
+    return intersect_size(yhatmic, ymic, 0) / (union_size(yhatmic, ymic, 0) + 1e-10)
 
 def micro_precision(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / yhatmic.sum(axis=0)
+    return intersect_size(yhatmic, ymic, 0) / (yhatmic.sum(axis=0) + 1e-10)
 
 def micro_recall(yhatmic, ymic):
-    return intersect_size(yhatmic, ymic, 0) / ymic.sum(axis=0)
+    return intersect_size(yhatmic, ymic, 0) / (ymic.sum(axis=0) + 1e-10)
 
 def micro_f1(yhatmic, ymic):
     prec = micro_precision(yhatmic, ymic)
@@ -166,7 +202,7 @@ def micro_f1(yhatmic, ymic):
         f1 = 2*(prec*rec)/(prec+rec)
     return f1
 
-def auc_metrics(yhat_raw, y, ymic):
+def auc_metrics(yhat_raw, y, ymic, level=''):
     if yhat_raw.shape[0] <= 1:
         return
     fpr = {}
@@ -189,13 +225,13 @@ def auc_metrics(yhat_raw, y, ymic):
     aucs = []
     for i in relevant_labels:
         aucs.append(auc_labels['auc_%d' % i])
-    roc_auc['auc_macro'] = np.mean(aucs)
+    roc_auc['auc_macro' + level] = np.mean(aucs)
 
     #micro-AUC: just look at each individual prediction
     yhatmic = yhat_raw.ravel()
     fpr["micro"], tpr["micro"], _ = roc_curve(ymic, yhatmic) 
-    roc_auc["auc_micro"] = auc(fpr["micro"], tpr["micro"])
-
+    roc_auc["auc_micro" + level] = auc(fpr["micro"], tpr["micro"])
+    
     return roc_auc
 
 ########################
@@ -318,23 +354,27 @@ def intersect_size(yhat, y, axis):
     #axis=0 for label-level union (macro). axis=1 for instance-level
     return np.logical_and(yhat, y).sum(axis=axis).astype(float)
 
-def print_metrics(metrics):
+def print_metrics(metrics, level=''):
     print()
-    if "auc_macro" in metrics.keys():
+    if level != '':
+        print('metrics ' + level + ' level')
+        level = '_' + level
+        
+    if "auc_macro"  + level in metrics.keys():
         print("[MACRO] accuracy, precision, recall, f-measure, AUC")
-        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro"], metrics["prec_macro"], metrics["rec_macro"], metrics["f1_macro"], metrics["auc_macro"]))
+        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro" + level], metrics["prec_macro" + level], metrics["rec_macro" + level], metrics["f1_macro" + level], metrics["auc_macro" + level]))
     else:
         print("[MACRO] accuracy, precision, recall, f-measure")
-        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro"], metrics["prec_macro"], metrics["rec_macro"], metrics["f1_macro"]))
+        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro" + level], metrics["prec_macro" + level], metrics["rec_macro" + level], metrics["f1_macro" + level]))
 
-    if "auc_micro" in metrics.keys():
+    if "auc_micro" + level in metrics.keys():
         print("[MICRO] accuracy, precision, recall, f-measure, AUC")
-        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro"], metrics["prec_micro"], metrics["rec_micro"], metrics["f1_micro"], metrics["auc_micro"]))
+        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro" + level], metrics["prec_micro" + level], metrics["rec_micro" + level], metrics["f1_micro" + level], metrics["auc_micro" + level]))
     else:
         print("[MICRO] accuracy, precision, recall, f-measure")
-        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro"], metrics["prec_micro"], metrics["rec_micro"], metrics["f1_micro"]))
+        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro" + level], metrics["prec_micro" + level], metrics["rec_micro" + level], metrics["f1_micro" + level]))
     for metric, val in metrics.items():
-        if metric.find("rec_at") != -1:
+        if metric.find("rec_at" + level) != -1:
             print("%s: %.4f" % (metric, val))
     print()
 
