@@ -85,6 +85,38 @@ class Attention(torch.nn.Module):
         return alpha.matmul(x), alpha
 
 
+class Attention(torch.nn.Module):
+    def __init__(self, embed_size, num_labels, embed_desc=False, kernel_size=5, input_size=100):
+
+        super(Attention, self).__init__()
+        
+        self.embed_desc = embed_desc
+        self.softmax = nn.Softmax(dim=2)
+        
+        if self.embed_desc:
+            assert input_size % 2 == 0
+            self.gru_labels = nn.GRU(input_size, int(embed_size/2), bidirectional= True, batch_first=True)
+            self.linear = nn.Linear(embed_size, embed_size)
+            self.weight = self.linear.weight
+        
+        else:
+            self.U = nn.Linear(embed_size, num_labels, bias=False)
+            self.weight = self.U.weight
+
+    def forward(self, x, desc_data=None):
+
+        if self.embed_desc:
+            n_labels = desc_data.size(0)
+            _, desc_data =self.gru_labels(desc_data)
+            desc_data = desc_data.transpose(0,1).contiguous().view(n_labels,-1)
+            desc_data = torch.tanh(self.linear(desc_data))
+            alpha = self.softmax(desc_data.matmul(x.transpose(1,2)))
+        else:
+            alpha = self.softmax(self.U(x).transpose(1,2))
+
+        return alpha.matmul(x), alpha
+
+
 class MultiHeadAttention(nn.Module):
     def __init__(self, heads, d_model, dropout = 0.1):
         super().__init__()
@@ -774,3 +806,112 @@ class ConvAttnPool_(BaseModel):
             yhat = self.sigmoid(yhat)
             
             return yhat, loss, alpha
+
+
+class HierarchicalConvAttn(BaseModel):
+
+    def __init__(self, Y_fine, embed_file, kernel_size_words, num_filter_maps_words, kernel_size_sents, num_filter_maps_sents, gpu, vocab_size, Y_coarse=None, embed_size=100, embed_trainable=False, dropout_words=0.5, dropout_sents=0.5, hier=False, fine2coarse=None, embed_desc=False, layer_norm=False):
+        super(HierarchicalConvAttn, self).__init__(Y_fine, embed_file, vocab_size, dropout=dropout_words, gpu=gpu, embed_size=embed_size, embed_trainable=embed_trainable, hier=hier)
+
+        assert num_filter_maps_words%2 == 0
+        
+        self.gru_words = nn.GRU(self.embed_size, int(num_filter_maps_words/2), bidirectional= True, batch_first=True)
+        self.linear_words = nn.Linear(num_filter_maps_words, num_filter_maps_words)
+        
+        self.tanh = nn.Tanh()
+        
+        self.attention_words = Attention(num_filter_maps_words, 1)
+        xavier_uniform(self.attention_words.weight)
+        
+        self.sents_drop = nn.Dropout(p=dropout_sents)
+        
+        self.conv_sents = nn.Conv1d(num_filter_maps_words, num_filter_maps_sents, kernel_size=kernel_size_sents, padding=floor(kernel_size_sents/2))
+        xavier_uniform(self.conv_sents.weight)
+
+        self.attention_sents_fine = Attention(num_filter_maps_sents, Y_fine, embed_desc, kernel_size=kernel_size_words, input_size=embed_size)
+        xavier_uniform(self.attention_sents_fine.weight)
+        
+        self.final_fine = nn.Linear(num_filter_maps_sents, Y_fine, bias=True)
+        xavier_uniform(self.final_fine.weight)
+        
+        self.embed_desc = embed_desc
+        
+        self.layer_norm_words = nn.LayerNorm(torch.Size([num_filter_maps_words])) if layer_norm else None
+        self.layer_norm_sents = nn.LayerNorm(torch.Size([num_filter_maps_sents])) if layer_norm else None
+
+        if self.hier:
+            self.attention_sents_coarse = Attention(num_filter_maps_sents, Y_coarse)
+            xavier_uniform(self.attention_sents_coarse.weight)
+        
+            self.final_coarse = nn.Linear(num_filter_maps_sents, Y_coarse, bias=True)
+            xavier_uniform(self.final_coarse.weight)
+            
+            if fine2coarse is not None:
+                self.fine2coarse = torch.LongTensor(fine2coarse)
+            
+            #self.drop_cat = nn.Dropout(p=0.5)
+            
+            #self.final_cat = nn.Linear(Y_coarse + Y_fine, Y_coarse + Y_fine, bias=True)
+            #xavier_uniform(self.final_coarse.weight)
+        
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x, target_fine, target_coarse=None, target_cat=None, desc_data=None, get_attention=True):
+        
+        x = self.embed(x)
+        x = self.embed_drop(x)
+        
+        s0, s1, s2, s3 = x.size()
+        
+        x = x.view(s0*s1, s2, s3)
+        
+        x, _ = self.gru_words(x)
+        x = x.transpose(0,1).contiguous().view(s0*s1, s2, -1)
+        x = self.linear_words(x)
+        x = self.tanh(x)
+        
+        if self.layer_norm_words is not None:
+            x = self.layer_norm_words(x)
+        
+        x, alpha_words = self.attention_words(x)
+        
+        x = torch.squeeze(x)
+        
+        x = x.view(s0, s1, -1)
+        
+        x = self.sents_drop(x)
+        
+        x = x.transpose(1, 2)
+        
+        x = self.tanh(self.conv_sents(x).transpose(1,2))
+        
+        if self.layer_norm_sents is not None:
+            x = self.layer_norm_sents(x)
+        
+        m_fine, alpha_sents_fine = self.attention_sents_fine(x, self.embed(desc_data)) if self.embed_desc else self.attention_sents_fine(x)
+        yhat_fine = self.final_fine.weight.mul(m_fine).sum(dim=2).add(self.final_fine.bias)
+        
+        if self.hier:
+            m_coarse, alpha_sents_coarse = self.attention_sents_coarse(x)
+            yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
+            
+            #yhat_cat = self.drop_cat(torch.cat([yhat_coarse, yhat_fine], dim=1))
+            #yhat_cat  = self.final_cat(yhat_cat)
+            #loss = self._get_loss(yhat_cat, target_cat)
+            #yhat_split = torch.split(self.sigmoid(yhat_cat), [yhat_coarse.size(1), yhat_fine.size(1)], dim=1)
+            #return (yhat_split[1], yhat_split[0]) , loss, (alpha_sents_fine, alpha_sents_coarse)
+
+            #yhat_fine = yhat_fine.mul(yhat_coarse[:,self.fine2coarse])
+
+            loss = self._get_loss(yhat_fine, target_fine) + self._get_loss(yhat_coarse, target_coarse)
+            
+            yhat_coarse = self.sigmoid(yhat_coarse)
+            yhat_fine = self.sigmoid(yhat_fine)
+            
+            return (yhat_fine, yhat_coarse), loss, (alpha_sents_fine, alpha_sents_coarse)
+        else:
+            loss = self._get_loss(yhat_fine, target_fine)
+            
+            yhat_fine = self.sigmoid(yhat_fine)
+            
+            return yhat_fine, loss, alpha_sents_fine
