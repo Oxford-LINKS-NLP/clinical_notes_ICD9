@@ -16,7 +16,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 from constants import *
-from logger import Tensorboard
+#from logger import Tensorboard
 import datasets
 import evaluation
 import interpret
@@ -93,7 +93,7 @@ def train_epochs(args, model, optimizer, params, dicts):
         model_dir = os.path.dirname(os.path.abspath(args.test_model))
 
     dataset_test = MimicDataset(args.data_path.replace('train', 'test'), dicts, num_labels_fine, num_labels_coarse, args.max_len)
-    tensorboard = Tensorboard(model_dir)
+    #tensorboard = Tensorboard(model_dir)
     
     #train for n_epochs unless criterion metric does not improve for [patience] epochs
     for epoch in range(args.n_epochs if not test_only else 0):
@@ -111,11 +111,11 @@ def train_epochs(args, model, optimizer, params, dicts):
             metrics_dev, _, _, _ = test(model, args.Y, epoch, dataset_dev, args.batch_size, args.embed_desc, fold, args.gpu, args.version, dicts, args.samples, model_dir)
 
         for name, val in metrics_train.items():
-            tensorboard.log_scalar('%s_train' % (name), val, epoch)
+            #tensorboard.log_scalar('%s_train' % (name), val, epoch)
             metrics_hist_train[name].append(metrics_train[name])
             metrics_hist_train.update({'epochs': epoch+1})
         for name, val in metrics_dev.items():
-            tensorboard.log_scalar('%s_dev' % (name), val, epoch)
+            #tensorboard.log_scalar('%s_dev' % (name), val, epoch)
             metrics_hist_dev[name].append(metrics_dev[name])
 
         metrics_hist_all = (metrics_hist_train, metrics_hist_dev, None)
@@ -135,13 +135,13 @@ def train_epochs(args, model, optimizer, params, dicts):
         metrics_test, metrics_codes, metrics_inst, hadm_ids = test(model, args.Y, epoch, dataset_test, args.batch_size, args.embed_desc,fold, args.gpu, args.version, dicts, args.samples, model_dir)
     
     for name, val in metrics_test.items():
-        if not test_only:
-            tensorboard.log_scalar('%s_test' % (name), val, epoch)
+        #if not test_only:
+        #    tensorboard.log_scalar('%s_test' % (name), val, epoch)
         metrics_hist_test[name].append(metrics_test[name])
     
     metrics_hist_all = (metrics_hist_train, metrics_hist_dev, metrics_hist_test)
 
-    tensorboard.close()
+    #tensorboard.close()
         
     #save metrics, model, params
     persistence.save_everything(args, dicts, metrics_hist_all, model, model_dir, params, args.criterion, metrics_codes=metrics_codes, metrics_inst=metrics_inst, hadm_ids=hadm_ids, evaluate=True, test_only=test_only)
