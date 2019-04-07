@@ -4,6 +4,7 @@
 * tqdm
 * scikit-learn 0.19.1
 * numpy 1.13.3, scipy 0.19.1, pandas 0.24.1
+* jsonlines
 
 Other versions may also work, but the ones listed are the ones I've used
 
