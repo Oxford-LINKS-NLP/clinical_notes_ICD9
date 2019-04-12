@@ -7,7 +7,7 @@ import sys
 
 import numpy as np
 
-import learn.models as models
+import models
 
 def save_samples(data, output, target_data, s, filter_size, tp_file, fp_file, dicts=None):
     """

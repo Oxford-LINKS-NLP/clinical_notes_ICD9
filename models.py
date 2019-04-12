@@ -13,8 +13,6 @@ import random
 import sys
 import time
 
-from constants import *
-
 class BaseModel(nn.Module):
 
     def __init__(self, Y, word_embeddings_matrix, vocab_size, dropout=0.5, gpu=True, embed_size=100, embed_freeze=False, hier=False):

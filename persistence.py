@@ -10,9 +10,6 @@ import torch
 
 import pandas as pd
 
-from constants import *
-from learn import models
-
 top_10_codes = ['401.9', '38.93', '428.0', '427.31', '414.01', '96.04', '96.6', '584.9', '250.00' ,'96.71']
 
 def save_metrics(dicts, metrics_hist, model_dir, metrics_codes=None, metrics_inst=None, hadm_ids=None, test_only=False):

@@ -2,14 +2,12 @@
     Main training code. Loads data, builds the model, trains, tests, evaluates, writes outputs, etc.
 """
 import torch
-import torch.optim as optim
+from torch import optim
 from torch.utils.data import DataLoader
 
-import csv
 import argparse
 import os 
 import numpy as np
-import random
 import sys
 import time
 from tqdm import tqdm
@@ -20,8 +18,7 @@ import datasets
 import evaluation
 import interpret
 import persistence
-import learn.models as models
-import learn.tools as tools
+import models
 
 num_workers = 0
 
@@ -46,15 +43,13 @@ def init(args):
     """
         Load data, build model, create optimizer, create vars to hold metrics, etc.
     """
-    #need to handle really large text fields
-    csv.field_size_limit(sys.maxsize)
 
     #load vocab and other lookups
     print("loading lookups...")
 
     dicts = datasets.load_lookups(args, hier=args.hier)
 
-    model = tools.pick_model(args, dicts)
+    model = pick_model(args, dicts)
         
     print(model)
 
@@ -323,6 +318,78 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
         persistence.write_preds(hids, docs, attention, y, yhat, yhat_raw, metrics_inst, model_dir, fold, ind2c, c2ind, dicts['desc_plain'])
     
     return metrics, metrics_codes, metrics_inst, hids
+    
+def pick_model(args, dicts):
+    """
+        Use args to initialize the appropriate model
+    """
+
+    Y = len(dicts['ind2c'])
+    Y_coarse = len(dicts['ind2c_coarse']) if args.hier else None
+    
+    if args.embed_file and not args.test_model:
+        print("loading pretrained embeddings (freeze={0}, normalize={1})...".format(args.embed_freeze, args.embed_normalize))            
+        word_embeddings_matrix = load_embeddings(args.embed_file, dicts['ind2w'], args.dims[0], args.embed_normalize)
+    else:
+        word_embeddings_matrix = None
+        
+    vocab_size = len(dicts['ind2w'])
+                    
+    if args.model == "dummy":
+        model = models.DummyModel(Y, dicts, args.gpu)
+    elif args.model == "conv_attn":
+        model = models.ConvAttnPool(Y, args.dims, args.filter_size, word_embeddings_matrix, args.gpu, vocab_size,
+                                    embed_freeze=args.embed_freeze, dropout=args.dropout,
+                                    hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
+                                    embed_desc=args.embed_desc, layer_norm=args.layer_norm)
+    elif args.model == "hier_conv_attn":
+        model = models.HierarchicalConvAttn(Y, args.dims, args.filter_size, word_embeddings_matrix, args.gpu, vocab_size,
+                                    embed_freeze=args.embed_freeze, dropout=args.dropout,
+                                    hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
+                                    embed_desc=args.embed_desc, layer_norm=args.layer_norm)
+
+    if args.test_model:
+        sd = torch.load(os.path.abspath(args.test_model))
+        model.load_state_dict(sd)
+
+    if args.gpu:
+        model.cuda()
+
+    return model
+    
+def load_embeddings(embed_file, ind2w, embed_size, embed_normalize):
+    word_embeddings = {}
+    vocab_size = len(ind2w)
+    
+    with open(embed_file) as ef:
+        for line in ef:
+            line = line.rstrip().split()
+            idx = len(line) - embed_size
+            word = '_'.join(line[:idx]).lower().strip()
+            vec = np.array(line[idx:]).astype(np.float)
+            word_embeddings[word] = vec
+
+    W = np.zeros((vocab_size+2, embed_size))
+    words_found = 0
+    
+    for ind, word in ind2w.items():
+
+        try: 
+            W[ind] = word_embeddings[word]
+            words_found += 1
+        except KeyError:
+            W[ind] = np.random.randn(1, embed_size)
+        if embed_normalize:
+            W[ind] = W[ind] / (np.linalg.norm(W[ind]) + 1e-6)
+
+    W[vocab_size-1] = np.random.randn(1, embed_size)
+    
+    if embed_normalize:
+        W[vocab_size-1] = W[vocab_size-1] / (np.linalg.norm(W[vocab_size-1]) + 1e-6)
+
+    print('vocabulary coverage: {}'.format(words_found/vocab_size))
+    
+    return W
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="train a neural network on some clinical documents")
