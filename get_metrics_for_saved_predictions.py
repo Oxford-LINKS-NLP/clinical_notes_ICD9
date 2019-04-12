@@ -10,7 +10,6 @@ import sys
 import numpy as np
 from tqdm import tqdm
 
-from constants import *
 import datasets
 import evaluation
 from learn import tools
@@ -27,8 +26,8 @@ parts = dset.split('_')
 Y = 'full' if parts[1].startswith('full') else 50
 version = 'mimic2' if parts[0].endswith('2') else 'mimic3'
 data_dir = MIMIC_2_DIR if version == 'mimic2' else MIMIC_3_DIR
-train_file = '%s/train.csv' % data_dir if version == 'mimic2' else '%s/train_%s.csv' % (data_dir, str(Y))
-test_file = '%s/test.csv' % data_dir if version == 'mimic2' else '%s/test_%s.csv' % (data_dir, str(Y))
+train_file = '%s/train_%s.csv' % (data_dir, str(Y))
+test_file = '%s/test_%s.csv' % (data_dir, str(Y))
 
 ind2c, _ = datasets.load_full_codes(train_file, version=version)
 c2ind = {c:i for i,c in ind2c.items()}
@@ -81,7 +80,7 @@ for i,hadm_id in tqdm(enumerate(hadm_ids)):
         yhat_raw_inds = [scors[hadm_id][ind2c[j]] if ind2c[j] in scors[hadm_id] else 0 for j in range(num_labels)]
         yhat_raw[i] = yhat_raw_inds
    
-if version == "mimic3" and Y == "full":
+if Y == "full":
     print("evaluating code-type metrics")
     diag_preds, diag_golds, proc_preds, proc_golds, golds, preds, hadm_ids, type_dicts = evaluation.results_by_type(Y, model_dir, version)
     f1_diag = evaluation.diag_f1(diag_preds, diag_golds, type_dicts[0], hadm_ids)

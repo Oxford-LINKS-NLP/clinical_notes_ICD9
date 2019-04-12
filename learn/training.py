@@ -15,7 +15,6 @@ import time
 from tqdm import tqdm
 from collections import defaultdict
 
-from constants import *
 #from logger import Tensorboard
 import datasets
 import evaluation
@@ -24,7 +23,7 @@ import persistence
 import learn.models as models
 import learn.tools as tools
 
-num_workers = 2
+num_workers = 0
 
 def main(args, reporter=None):
     start = time.time()
@@ -87,7 +86,7 @@ def train_epochs(args, model, optimizer, params, dicts):
     if not test_only:
         dataset_train = MimicDataset(args.data_path, dicts, num_labels_fine, num_labels_coarse, args.max_len)
         dataset_dev = MimicDataset(args.data_path.replace('train', 'dev'), dicts, num_labels_fine, num_labels_coarse, args.max_len)
-        model_dir = os.path.join(MODEL_DIR, '_'.join([args.model, time.strftime('%Y-%m-%d_%H:%M:%S')]))
+        model_dir = os.path.join(args.models_dir, '_'.join([args.model, time.strftime('%Y-%m-%d_%H:%M:%S')]))
         os.mkdir(model_dir)
     else:
         model_dir = os.path.dirname(os.path.abspath(args.test_model))
@@ -98,17 +97,17 @@ def train_epochs(args, model, optimizer, params, dicts):
     #train for n_epochs unless criterion metric does not improve for [patience] epochs
     for epoch in range(args.n_epochs if not test_only else 0):
    
-        losses = train(model, optimizer, args.Y, epoch, args.batch_size, args.embed_desc, dataset_train, args.shuffle, args.gpu, args.version, dicts, args.quiet)
+        losses = train(model, optimizer, args.Y, epoch, args.batch_size, args.embed_desc, dataset_train, args.shuffle, args.gpu, dicts)
         loss = np.mean(losses)
         print("epoch loss: " + str(loss))
 
         metrics_train = {'loss': loss}
 
-        fold = 'test' if args.version == 'mimic2' else 'dev'
+        fold ='dev'
 
         #evaluate on dev
         with torch.no_grad():
-            metrics_dev, _, _, _ = test(model, args.Y, epoch, dataset_dev, args.batch_size, args.embed_desc, fold, args.gpu, args.version, dicts, args.samples, model_dir)
+            metrics_dev, _, _, _ = test(model, args.Y, epoch, dataset_dev, args.batch_size, args.embed_desc, fold, args.gpu, dicts, model_dir)
 
         for name, val in metrics_train.items():
             #tensorboard.log_scalar('%s_train' % (name), val, epoch)
@@ -132,7 +131,7 @@ def train_epochs(args, model, optimizer, params, dicts):
     fold = 'test'            
     print("\nevaluating on test")
     with torch.no_grad():
-        metrics_test, metrics_codes, metrics_inst, hadm_ids = test(model, args.Y, epoch, dataset_test, args.batch_size, args.embed_desc,fold, args.gpu, args.version, dicts, args.samples, model_dir)
+        metrics_test, metrics_codes, metrics_inst, hadm_ids = test(model, args.Y, epoch, dataset_test, args.batch_size, args.embed_desc,fold, args.gpu, dicts, model_dir)
     
     for name, val in metrics_test.items():
         #if not test_only:
@@ -158,7 +157,7 @@ def early_stop(metrics_hist, criterion, patience):
         #keep training if criterion results have all been nan so far
         return False
 
-def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, gpu, version, dicts, quiet):
+def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, gpu, dicts):
     """
         Training loop.
         output: losses for each example for this iteration
@@ -212,13 +211,13 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         optimizer.step()
         #    optimizer.zero_grad()
         
-        if not quiet and batch_idx % print_every == 0:
+        if batch_idx % print_every == 0:
             #print the average loss of the last 10 batches
             print("Train epoch: {} [batch #{}, batch_size {}, seq length {}]\tLoss: {:.6f}".format(
                 epoch, batch_idx, batch_size, seq_length, np.mean(losses[-10:])))
     return losses
 
-def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, version, dicts, samples, model_dir):
+def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, model_dir):
     """
         Testing loop.
         Returns metrics
@@ -328,68 +327,39 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, version, d
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="train a neural network on some clinical documents")
     parser.add_argument("data_path", type=str,
-                        help="path to a file containing sorted train data. dev/test splits assumed to have same name format with 'train' replaced by 'dev' and 'test'")
+                        help="path to a file containing train data. dev/test splits assumed to have same name format with 'train' replaced by 'dev' and 'test'")
     parser.add_argument("vocab", type=str, help="path to a file holding vocab word list for discretizing words")
     parser.add_argument("Y", type=str, help="size of label space")
-    parser.add_argument("model", type=str, choices=["cnn_vanilla", "rnn", "conv_attn", "conv_attn_old", "multi_conv_attn", "hier_conv_attn", "saved", "dummy"], help="model")
-    parser.add_argument("n_epochs", type=int, help="number of epochs to train")
+    parser.add_argument("model", type=str, choices=["conv_attn", "hier_conv_attn", "dummy"], help="model")
+    parser.add_argument("dims", type=lambda s: [int(dim) for dim in s.split(',')], help="layers dimensions")
+    parser.add_argument("--n-epochs", type=int, required=True, dest="n_epochs", help="number of epochs to train")
     parser.add_argument("--embed-file", type=str, required=False, dest="embed_file",
                         help="path to a file holding pre-trained embeddings")
-    parser.add_argument("--cell-type", type=str, choices=["lstm", "gru"], help="what kind of RNN to use (default: GRU)", dest='cell_type',
-                        default='gru')
-    parser.add_argument("--rnn-dim", type=int, required=False, dest="rnn_dim", default=128,
-                        help="size of rnn hidden layer (default: 128)")
-    parser.add_argument("--bidirectional", dest="bidirectional", action="store_const", required=False, const=True,
-                        help="optional flag for rnn to use a bidirectional model")
-    parser.add_argument("--rnn-layers", type=int, required=False, dest="rnn_layers", default=1,
-                        help="number of layers for RNN models (default: 1)")
-    parser.add_argument("--embed-size", type=int, required=False, dest="embed_size", default=100,
-                        help="size of embedding dimension. (default: 100)")
-    parser.add_argument("--embed-trainable", action='store_true', dest="embed_trainable",
+    parser.add_argument("--embed-freeze", action='store_true', dest="embed_freeze",
                         help="optional flag to make word embeddings trainable")
     parser.add_argument("--embed-normalize", action='store_true', dest="embed_normalize",
                         help="optional flag to normalize word embeddings")
     parser.add_argument("--shuffle", action='store_true', dest="shuffle",
                         help="optional flag to shuffle training dataset at each epoch")                    
-    parser.add_argument("--filter-size", type=str, required=False, dest="filter_size", default=4,
-                        help="size of convolution filter to use. (default: 4) For multi_conv_attn, give comma separated integers, e.g. 3,4,5")
-    parser.add_argument("--filter-size-words", type=int, required=False, dest="filter_size_words", default=5,
-                        help="size of words convolution filter to use. (default: 5)")
-    parser.add_argument("--filter-size-sents", type=int, required=False, dest="filter_size_sents", default=3,
-                        help="size of words convolution filter to use. (default: 3)")
-    parser.add_argument("--num-filter-maps", type=int, required=False, dest="num_filter_maps", default=50,
-                        help="size of conv output (default: 50)")
-    parser.add_argument("--num-filter-maps-words", type=int, required=False, dest="num_filter_maps_words", default=50,
-                        help="size of words conv output (default: 50)")
-    parser.add_argument("--num-filter-maps-sents", type=int, required=False, dest="num_filter_maps_sents", default=25,
-                        help="size of sents conv output (default: 25)")
+    parser.add_argument("--filter-size", type=int, required=False, dest="filter_size", default=5,
+                        help="size of convolution filter to use. (default: 5)")
     parser.add_argument("--weight-decay", type=float, required=False, dest="weight_decay", default=0,
                         help="coefficient for penalizing l2 norm of model weights (default: 0)")
     parser.add_argument("--lr", type=float, required=False, dest="lr", default=1e-3,
-                        help="learning rate for Adam optimizer (default=1e-3)")
+                        help="initial learning rate for Adam optimizer (default=1e-3)")
     parser.add_argument("--batch-size", type=int, required=False, dest="batch_size", default=16,
                         help="size of training batches")
-    parser.add_argument("--dropout", dest="dropout", type=float, required=False, default=0.5,
+    parser.add_argument("--dropout", dest="dropout", type=lambda s: [float(drop) for drop in s.split(',')], required=False, default=[0.5],
                         help="optional specification of dropout (default: 0.5)")
-    parser.add_argument("--dropout-sents", dest="dropout_sents", type=float, required=False, default=0.5,
-                        help="optional specification of dropout for sentence layer (default: 0.5)")
-    parser.add_argument("--dataset", type=str, choices=['mimic2', 'mimic3'], dest="version", default='mimic3', required=False,
-                        help="version of MIMIC in use (default: mimic3)")
     parser.add_argument("--test-model", type=str, dest="test_model", required=False, help="path to a saved model to load and evaluate")
+    parser.add_argument("--models-dir", type=str, dest="models_dir", required=True, help="path to saved models directory")
+    parser.add_argument("--data-dir", type=str, dest="data_dir", required=True, help="path to mimic data directory")
     parser.add_argument("--criterion", type=str, default='f1_micro', required=False, dest="criterion",
                         help="which metric to use for early stopping (default: f1_micro)")
     parser.add_argument("--patience", type=int, default=3, required=False,
                         help="how many epochs to wait for improved criterion metric before early stopping (default: 3)")
     parser.add_argument("--gpu", dest="gpu", action="store_const", required=False, const=True,
                         help="optional flag to use GPU if available")
-    parser.add_argument("--public-model", dest="public_model", action="store_const", required=False, const=True,
-                        help="optional flag for testing pre-trained models from the public github")
-    parser.add_argument("--stack-filters", dest="stack_filters", action="store_const", required=False, const=True,
-                        help="optional flag for multi_conv_attn to instead use concatenated filter outputs, rather than pooling over them")
-    parser.add_argument("--samples", dest="samples", action="store_const", required=False, const=True,
-                        help="optional flag to save samples of good / bad predictions")
-    parser.add_argument("--quiet", dest="quiet", action="store_const", required=False, const=True,
-                        help="optional flag not to print so much during training")
     parser.add_argument("--max-len", type=int, required=False, dest="max_len", default=-1,
                         help="set maximum number of tokens per document (optional)")
     parser.add_argument("--hier", action="store_true", dest="hier",

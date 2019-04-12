@@ -17,8 +17,6 @@ import string
 import re
 from collections import Counter
 
-from constants import *
-
 def load_vocab_dict(args, vocab_file, codes_desc=None):
     #reads vocab_file into two lookups (word:ind) and (ind:word)
     vocab = set()
@@ -28,14 +26,10 @@ def load_vocab_dict(args, vocab_file, codes_desc=None):
             line = line.rstrip()
             if line != '':
                 vocab.add(line.strip())
-    #hack because the vocabs were created differently for these models
-    if args.public_model and args.Y == 'full' and args.version == "mimic3" and args.model == 'conv_attn_old':
-        ind2w = {i:w for i,w in enumerate(sorted(vocab))}
-    else:
-        if codes_desc is not None:
-            desc = set([w for d in codes_desc for w in d])
-            vocab = vocab.union(desc)
-        ind2w = {i+1:w for i,w in enumerate(sorted(vocab))}
+    if codes_desc is not None:
+        desc = set([w for d in codes_desc for w in d])
+        vocab = vocab.union(desc)
+    ind2w = {i+1:w for i,w in enumerate(sorted(vocab))}
     w2ind = {w:i for i,w in ind2w.items()}
     
     #with open('desc_vocab.csv', 'r') as f:
@@ -53,11 +47,11 @@ def load_lookups(args, hier=False):
 
     #get code and description lookups
     if args.Y == 'full':
-        codes, codes_train_examples, codes_test_examples, codes_rank = load_full_codes(args.data_path, hier=hier, version=args.version)
+        codes, codes_train_examples, codes_test_examples, codes_rank = load_full_codes(args.data_path, hier=hier)
     else:
         codes, codes_train_examples, codes_test_examples, codes_rank = load_top_k_codes(args.Y, hier=hier)
     
-    desc_plain, codes_billable = load_code_descriptions(exclude_non_billable=args.exclude_non_billable)
+    desc_plain, codes_billable = load_code_descriptions(args.data_dir, args.exclude_non_billable)
 
     if not args.include_invalid:
         codes = codes.intersection(set(desc_plain.keys()))
@@ -103,11 +97,10 @@ def load_lookups(args, hier=False):
 
     return dicts
 
-def load_full_codes(train_path, hier=False, version='mimic3'):
+def load_full_codes(train_path, hier=False):
     """
         Inputs:
             train_path: path to train dataset
-            version: which (MIMIC) dataset
         Outputs:
             code lookup, description lookup
     """
@@ -117,37 +110,27 @@ def load_full_codes(train_path, hier=False, version='mimic3'):
     codes_rank = Counter()
     
     #build code lookups from appropriate datasets
-    if version == 'mimic2':
-        with open('%s/proc_dsums.csv' % MIMIC_2_DIR, 'r') as f:
-            r = csv.reader(f)
-            #header
-            next(r)
-            for row in r:
-                codes.update(set(row[-1].split(';')))
-                codes_train_examples.update(set(row[-1].split(';')))
-                codes_rank.update(set(row[-1].split(';')))
-    else:
-        for split in ['train', 'dev', 'test']:
-            if train_path.endswith('.ndjson'):
-                with jsonlines.open(train_path.replace('train', split), 'r') as f:
-                    for row in f:
-                        codes.update([c.strip('.') for c in row[4]])
-                        if split == 'train':
-                            codes_train_examples.update([c.strip('.') for c in row[4]])
-                        elif split == 'test':
-                            codes_test_examples.update([c.strip('.') for c in row[4]])
-                        codes_rank.update([c.strip('.') for c in row[4]])
-            else:
-                with open(train_path.replace('train', split), 'r') as f:
-                    lr = csv.reader(f)
-                    next(lr)
-                    for row in lr:
-                        codes.update([c.strip('.') for c in row[3].split(';')])
-                        if split == 'train':
-                            codes_train_examples.update([c.strip('.') for c in row[3].split(';')])
-                        elif split == 'test':
-                            codes_test_examples.update([c.strip('.') for c in row[3].split(';')])
-                        codes_rank.update([c.strip('.') for c in row[3].split(';')])
+    for split in ['train', 'dev', 'test']:
+        if train_path.endswith('.ndjson'):
+            with jsonlines.open(train_path.replace('train', split), 'r') as f:
+                for row in f:
+                    codes.update([c.strip('.') for c in row[4]])
+                    if split == 'train':
+                        codes_train_examples.update([c.strip('.') for c in row[4]])
+                    elif split == 'test':
+                        codes_test_examples.update([c.strip('.') for c in row[4]])
+                    codes_rank.update([c.strip('.') for c in row[4]])
+        else:
+            with open(train_path.replace('train', split), 'r') as f:
+                lr = csv.reader(f)
+                next(lr)
+                for row in lr:
+                    codes.update([c.strip('.') for c in row[3].split(';')])
+                    if split == 'train':
+                        codes_train_examples.update([c.strip('.') for c in row[3].split(';')])
+                    elif split == 'test':
+                        codes_test_examples.update([c.strip('.') for c in row[3].split(';')])
+                    codes_rank.update([c.strip('.') for c in row[3].split(';')])
 
     codes = set([str(c) for c in codes if c != ''])
     codes_train_examples = {code : count for code, count in codes_train_examples.most_common()}
@@ -187,49 +170,41 @@ def reformat(code, is_diag):
         code = code[:2] + '.' + code[2:] if len(code) > 2 else code
     return code
 
-def load_code_descriptions(version='mimic3', exclude_non_billable = False):
+def load_code_descriptions(data_dir, exclude_non_billable = False):
     #load description lookup from the appropriate data files
     desc_dict_plain = defaultdict(str)
     codes_billable = {}
     
-    if version == 'mimic2':
-        with open('%s/MIMIC_ICD9_mapping' % MIMIC_2_DIR, 'r') as f:
-            r = csv.reader(f)
-            #header
-            next(r)
-            for row in r:
-                desc_dict_plain[str(row[1])] = str(row[2])
-    else:
-        with open("%s/D_ICD_DIAGNOSES.csv" % (DATA_DIR), 'r') as descfile:
-            r = csv.reader(descfile)
-            #header
-            next(r)
-            for row in r:
-                code = reformat(row[1], True)
-                desc = row[-1]
-                desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
-                codes_billable[code] = True
+    with open("%s/D_ICD_DIAGNOSES.csv" % (data_dir), 'r') as descfile:
+        r = csv.reader(descfile)
+        #header
+        next(r)
+        for row in r:
+            code = reformat(row[1], True)
+            desc = row[-1]
+            desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
+            codes_billable[code] = True
 
-        with open("%s/D_ICD_PROCEDURES.csv" % (DATA_DIR), 'r') as descfile:
-            r = csv.reader(descfile)
-            #header
-            next(r)
-            for row in r:
-                code = reformat(row[1], False)
-                desc = row[-1]
-                desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
-                codes_billable[code] = True
+    with open("%s/D_ICD_PROCEDURES.csv" % (data_dir), 'r') as descfile:
+        r = csv.reader(descfile)
+        #header
+        next(r)
+        for row in r:
+            code = reformat(row[1], False)
+            desc = row[-1]
+            desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
+            codes_billable[code] = True
 
-        if not exclude_non_billable:
-            with open('%s/ICD9_descriptions' % DATA_DIR, 'r') as labelfile:
-                for i,row in enumerate(labelfile):
-                    row = row.rstrip().split()
-                    code = str(row[0])
-                    
-                    if code not in desc_dict_plain.keys():
-                        desc = ' '.join(row[1:])
-                        desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
-                        codes_billable[code] = False
+    if not exclude_non_billable:
+        with open('%s/ICD9_descriptions' % data_dir, 'r') as labelfile:
+            for i,row in enumerate(labelfile):
+                row = row.rstrip().split()
+                code = str(row[0])
+                
+                if code not in desc_dict_plain.keys():
+                    desc = ' '.join(row[1:])
+                    desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
+                    codes_billable[code] = False
 
     return desc_dict_plain, codes_billable
     

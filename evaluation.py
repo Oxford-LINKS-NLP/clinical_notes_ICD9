@@ -12,7 +12,6 @@ import sys
 from sklearn.metrics import roc_curve, auc
 from tqdm import tqdm
 
-from constants import *
 import datasets
 
 def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True, level= ''):
@@ -238,7 +237,7 @@ def auc_metrics(yhat_raw, y, ymic, level=''):
 # METRICS BY CODE TYPE
 ########################
 
-def results_by_type(Y, mdir, version='mimic3'):
+def results_by_type(Y, mdir):
     d2ind = {}
     p2ind = {}
 
@@ -272,7 +271,7 @@ def results_by_type(Y, mdir, version='mimic3'):
     diag_golds = defaultdict(lambda: set([]))
     proc_golds = defaultdict(lambda: set([]))
     golds = defaultdict(lambda: set())
-    test_file = '%s/test_%s.csv' % (MIMIC_3_DIR, str(Y)) if version == 'mimic3' else '%s/test.csv' % MIMIC_2_DIR
+    test_file = '%s/test_%s.csv' % (MIMIC_3_DIR, str(Y))
     with open(test_file, 'r') as f:
         r = csv.reader(f)
         #header
@@ -380,12 +379,12 @@ def print_metrics(metrics, level=''):
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:
-        print("usage: python " + str(os.path.basename(__file__) + " [train_dataset] [|Y| (as string)] [version (mimic2 or mimic3)] [model_dir]"))
+        print("usage: python " + str(os.path.basename(__file__) + " [train_dataset] [|Y| (as string)] [model_dir]"))
         sys.exit(0)
-    train_path, Y, version, mdir = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-    ind2c, _ = datasets.load_full_codes(train_path, version=version)
+    train_path, Y, mdir = sys.argv[1], sys.argv[2], sys.argv[3]
+    ind2c, _ = datasets.load_full_codes(train_path)
 
-    diag_preds, diag_golds, proc_preds, proc_golds, golds, preds, hadm_ids, type_dicts = results_by_type(Y, mdir, version)
+    diag_preds, diag_golds, proc_preds, proc_golds, golds, preds, hadm_ids, type_dicts = results_by_type(Y, mdir)
     yhat, yhat_raw, y, metrics = metrics_from_dicts(preds, golds, mdir, ind2c)
     print_metrics(metrics)
 
