@@ -557,6 +557,9 @@ class ConvAttnPool(BaseModel):
             self.final_coarse = nn.Linear(dims[1], Y_coarse, bias=True)
             xavier_uniform(self.final_coarse.weight)
             
+            self.bias = nn.Linear(Y, 1, bias=True)
+            xavier_uniform(self.bias.weight)
+            
             if fine2coarse is not None:
                 self.fine2coarse = torch.LongTensor(fine2coarse)
 
@@ -573,11 +576,12 @@ class ConvAttnPool(BaseModel):
         
         m, alpha = self.attention(x, self.embed(desc_data)) if self.embed_desc else self.attention(x)
         
-        yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
-        
         if self.hier:
             m_coarse, alpha_coarse = self.attention_coarse(x)
             yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
+            
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
+            yhat = yhat.add(self.sigmoid(self.bias.weight.mul(self.sigmoid(yhat_coarse[:,self.fine2coarse])).add(self.bias.bias)))
             
             mask = torch.round(self.sigmoid(yhat_coarse[:,self.fine2coarse]))
             yhat = yhat * mask
@@ -588,6 +592,7 @@ class ConvAttnPool(BaseModel):
             
             return (yhat, yhat_coarse), loss, (alpha, alpha_coarse)
         else:
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
             loss = self._get_loss(yhat, target)
             yhat = self.sigmoid(yhat)
             
