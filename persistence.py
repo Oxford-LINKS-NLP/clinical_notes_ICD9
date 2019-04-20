@@ -43,7 +43,7 @@ def write_docs_top_10(model_dir, fold, df, c2ind):
         ind = c2ind[code]
         
         docs_tp = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 1), axis=1)]
-        docs_tp['attention'] = docs_tp['attention'].apply(lambda a : a[ind])
+        docs_tp.attention = docs_tp['attention'].apply(lambda a : a[ind])
         n_samples = 5 if len(docs_tp)>=5 else len(docs_tp)
         if n_samples > 0:
             out_path = model_dir + '/docs_' + code + '_tp_' + fold + '.json'
@@ -59,7 +59,7 @@ def write_docs_top_10(model_dir, fold, df, c2ind):
         #        json.dump(json.loads(docs_tn.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
         
         docs_fp = df[df.apply(lambda x: bool(x['target'][ind] == 0) & bool(x['prediction'][ind] == 1), axis=1)]
-        docs_fp['attention'] = docs_fp['attention'].apply(lambda a : a[ind])
+        docs_fp.attention = docs_fp['attention'].apply(lambda a : a[ind])
         n_samples = 5 if len(docs_fp)>=5 else len(docs_fp)
         if n_samples > 0:
             out_path = model_dir + '/docs_' + code + '_fp_' + fold + '.json'
@@ -67,7 +67,7 @@ def write_docs_top_10(model_dir, fold, df, c2ind):
                 json.dump(json.loads(docs_fp.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
         
         docs_fn = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 0), axis=1)]
-        docs_fn['attention'] = docs_fn['attention'].apply(lambda a : a[ind])
+        docs_fn.attention = docs_fn['attention'].apply(lambda a : a[ind])
         n_samples = 5 if len(docs_fn)>=5 else len(docs_fn)
         if n_samples > 0:
             out_path = model_dir + '/docs_' + code + '_fn_' + fold + '.json'
@@ -99,11 +99,12 @@ def write_docs(model_dir, fold, df, lower, upper):
         doc_tp['attention'] = [a for a in doc['attention'][tp]]
         doc_tp['label'] = [t for t in tp]
         doc_tp['prediction'] = [p for p in tp]
-        doc_tp['posterior'] = [0 for p in tp]
+        doc_tp['posterior'] = [0 for p in tp] 
         
-        for j in range(len(doc_tp)):
-            pad = int((len(doc_tp['attention'][j]) - len(doc_tp['text'][j]))/2)
-            doc_tp['attention'][j] = doc_tp['attention'][j][pad:-pad] if pad > 0 else doc_tp['attention'][j]
+        #for j in range(len(doc_tp)):
+        #    assert len(doc_tp['attention'][j]) == len(doc_tp['text'][j])
+        #   pad = int((len(doc_tp['attention'][j]) - len(doc_tp['text'][j]))/2)
+        #   doc_tp.loc[[j],['attention']] = doc_tp['attention'][j][pad:-pad] if pad > 0 else doc_tp['attention'][j]
 
         out_path = model_dir + '/doc_f1_' + str(int(lower*100)) + '_' + str(int(upper*100)) + '_' + str(i) + '_tp_' + fold + '.json'
         with open(out_path, 'w') as f:
