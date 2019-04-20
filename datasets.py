@@ -11,6 +11,7 @@ import csv
 import math
 import numpy as np
 import sys
+import os
 import jsonlines
 
 import string
@@ -175,7 +176,7 @@ def load_code_descriptions(data_dir, exclude_non_billable = False):
     desc_dict_plain = defaultdict(str)
     codes_billable = {}
     
-    with open("%s/D_ICD_DIAGNOSES.csv" % (data_dir), 'r') as descfile:
+    with open(os.path.join(data_dir, 'D_ICD_DIAGNOSES.csv'), 'r') as descfile:
         r = csv.reader(descfile)
         #header
         next(r)
@@ -185,7 +186,7 @@ def load_code_descriptions(data_dir, exclude_non_billable = False):
             desc_dict_plain[code] = [word.lower() for word in re.split('\W+', desc) if word.isalpha()]
             codes_billable[code] = True
 
-    with open("%s/D_ICD_PROCEDURES.csv" % (data_dir), 'r') as descfile:
+    with open(os.path.join(data_dir, 'D_ICD_PROCEDURES.csv'), 'r') as descfile:
         r = csv.reader(descfile)
         #header
         next(r)
@@ -196,7 +197,7 @@ def load_code_descriptions(data_dir, exclude_non_billable = False):
             codes_billable[code] = True
 
     if not exclude_non_billable:
-        with open('%s/ICD9_descriptions' % data_dir, 'r') as labelfile:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ICD9_descriptions'), 'r') as labelfile:
             for i,row in enumerate(labelfile):
                 row = row.rstrip().split()
                 code = str(row[0])
