@@ -1,6 +1,6 @@
 """
     This file contains evaluation methods that take in a set of predicted labels 
-        and a set of ground truth labels and calculate precision, recall, accuracy, f1, and metrics @k
+        and a set of ground truth labels and calculate precision, recall, jaccard index, f1, and metrics @k
 """
 from collections import defaultdict
 import csv
@@ -9,12 +9,12 @@ import numpy as np
 import os
 import sys
 
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, precision_recall_curve, auc
 from tqdm import tqdm
 
 import datasets
 
-def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True, level= ''):
+def all_metrics(yhat, y, k=8, yhat_raw=None, level=None):
     """
         Inputs:
             yhat: binary predictions matrix 
@@ -24,9 +24,8 @@ def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True, level= ''):
         Outputs:
             dict holding relevant metrics
     """
-    if level != '':
-        level  = '_' + level
-    names = ["acc", "prec", "rec", "f1"]
+    
+    names = ["jac", "prec", "rec", "f1"]
 
     #macro
     macro, macro_codes = all_macro(yhat, y)
@@ -36,45 +35,51 @@ def all_metrics(yhat, y, k=8, yhat_raw=None, calc_auc=True, level= ''):
     yhatmic = yhat.ravel()
     micro = all_micro(yhatmic, ymic)
 
-    metrics = {names[i] + "_macro"  + level: macro[i] for i in range(len(macro))}
-    metrics.update({names[i] + "_micro" + level: micro[i] for i in range(len(micro))})
+    metrics = {names[i] + "_macro" : macro[i] for i in range(len(macro))}
+    metrics.update({names[i] + "_micro" : micro[i] for i in range(len(micro))})
 
     #AUC and @k
-    if yhat_raw is not None and calc_auc:
-        #allow k to be passed as int or list
-        if type(k) != list:
-            k = [k]
-        for k_i in k:
-            rec_at_k = recall_at_k(yhat_raw, y, k_i)
-            metrics['rec_at_%d' % k_i + level] = rec_at_k
-            prec_at_k = precision_at_k(yhat_raw, y, k_i)
-            metrics['prec_at_%d' % k_i + level] = prec_at_k
-            metrics['f1_at_%d' % k_i + level] = 2*(prec_at_k*rec_at_k)/(prec_at_k+rec_at_k)
+    #allow k to be passed as int or list
+    if type(k) != list:
+        k = [k]
+    for k_i in k:
+        rec_at_k = recall_at_k(yhat_raw, y, k_i)
+        metrics['rec_at_%d' % k_i] = rec_at_k
+        prec_at_k = precision_at_k(yhat_raw, y, k_i)
+        metrics['prec_at_%d' % k_i] = prec_at_k
+        metrics['f1_at_%d' % k_i] = 2*(prec_at_k*rec_at_k)/(prec_at_k+rec_at_k)
 
-        roc_auc = auc_metrics(yhat_raw, y, ymic, level=level)
-        metrics.update(roc_auc)
+    roc_auc, pr_auc = auc_metrics(yhat_raw, y, ymic)
+    metrics.update(roc_auc)
+    metrics.update(pr_auc)
+    
+    if level is not None:        
+        metrics = {"{}_{}".format(k, level) : v for k,v in metrics.items()}
 
-    metrics_inst_list = inst_accuracy_list(yhat, y), inst_precision_list(yhat, y), inst_recall_list(yhat, y), inst_f1_list(yhat, y)
+    metrics_inst_list = inst_jaccard_list(yhat, y), inst_precision_list(yhat, y), inst_recall_list(yhat, y), inst_f1_list(yhat, y)
     
     return metrics, macro_codes, metrics_inst_list
 
 def all_macro(yhat, y):
-    acc, acc_codes = macro_accuracy(yhat, y)
+    #with warnings.catch_warnings():
+    #    warnings.filterwarnings("ignore", category=UndefinedMetricWarning)
+
+    jac, jac_codes = macro_jaccard(yhat, y)
     prec, prec_codes = macro_precision(yhat, y)
     rec, rec_codes = macro_recall(yhat, y)
     f1, f1_codes = macro_f1(yhat, y)
-    macro = acc, prec, rec, f1
-    macro_codes = acc_codes, prec_codes, rec_codes, f1_codes
+    macro = jac, prec, rec, f1
+    macro_codes = jac_codes, prec_codes, rec_codes, f1_codes
     return macro, macro_codes
 
 def all_micro(yhatmic, ymic):
-    return micro_accuracy(yhatmic, ymic), micro_precision(yhatmic, ymic), micro_recall(yhatmic, ymic), micro_f1(yhatmic, ymic)
+    return micro_jaccard(yhatmic, ymic), micro_precision(yhatmic, ymic), micro_recall(yhatmic, ymic), micro_f1(yhatmic, ymic)
 
 #########################################################################
 #MACRO METRICS: calculate metric for each label and average across labels
 #########################################################################
 
-def macro_accuracy(yhat, y):
+def macro_jaccard(yhat, y):
     num = intersect_size(yhat, y, 0) / (union_size(yhat, y, 0) + 1e-10)
     return np.mean(num), num
 
@@ -101,7 +106,7 @@ def macro_f1(yhat, y):
 # INSTANCE-AVERAGED
 ###################
 
-def inst_accuracy_list(yhat, y):
+def inst_jaccard_list(yhat, y):
     num = intersect_size(yhat, y, 1) / union_size(yhat, y, 1)
     num[np.isnan(num)] = 0.
     return num
@@ -183,7 +188,7 @@ def precision_at_k(yhat_raw, y, k):
 #MICRO METRICS: treat every prediction as an individual binary prediction
 ##########################################################################
 
-def micro_accuracy(yhatmic, ymic):
+def micro_jaccard(yhatmic, ymic):
     return intersect_size(yhatmic, ymic, 0) / (union_size(yhatmic, ymic, 0) + 1e-10)
 
 def micro_precision(yhatmic, ymic):
@@ -201,37 +206,32 @@ def micro_f1(yhatmic, ymic):
         f1 = 2*(prec*rec)/(prec+rec)
     return f1
 
-def auc_metrics(yhat_raw, y, ymic, level=''):
+def auc_metrics(yhat_raw, y, ymic):
     if yhat_raw.shape[0] <= 1:
         return
-    fpr = {}
-    tpr = {}
+
+    roc_aucs = []
     roc_auc = {}
-    #get AUC for each label individually
-    relevant_labels = []
-    auc_labels = {}
     for i in range(y.shape[1]):
-        #only if there are true positives for this label
-        if y[:,i].sum() > 0:
-            fpr[i], tpr[i], _ = roc_curve(y[:,i], yhat_raw[:,i])
-            if len(fpr[i]) > 1 and len(tpr[i]) > 1:
-                auc_score = auc(fpr[i], tpr[i])
-                if not np.isnan(auc_score): 
-                    auc_labels["auc_%d" % i] = auc_score
-                    relevant_labels.append(i)
+        fpr, tpr, _ = roc_curve(y[:,i], yhat_raw[:,i])
+        roc_aucs.append(auc(fpr, tpr))
+    roc_auc['roc_auc_macro'] = np.nanmean(roc_aucs)
 
-    #macro-AUC: just average the auc scores
-    aucs = []
-    for i in relevant_labels:
-        aucs.append(auc_labels['auc_%d' % i])
-    roc_auc['auc_macro' + level] = np.mean(aucs)
-
-    #micro-AUC: just look at each individual prediction
     yhatmic = yhat_raw.ravel()
-    fpr["micro"], tpr["micro"], _ = roc_curve(ymic, yhatmic) 
-    roc_auc["auc_micro" + level] = auc(fpr["micro"], tpr["micro"])
+    fpr, tpr, _ = roc_curve(ymic, yhatmic) 
+    roc_auc["roc_auc_micro"] = auc(fpr, tpr)
     
-    return roc_auc
+    pr_aucs = []
+    pr_auc = {}
+    for i in range(y.shape[1]):
+        prec, rec, _ = precision_recall_curve(y[:,i], yhat_raw[:,i])
+        pr_aucs.append(auc(rec, prec))
+    pr_auc['pr_auc_macro'] = np.nanmean(pr_aucs)
+    
+    prec, rec, _ = precision_recall_curve(ymic, yhatmic)
+    pr_auc['pr_auc_micro'] = auc(rec, prec)
+    
+    return roc_auc, pr_auc
 
 ########################
 # METRICS BY CODE TYPE
@@ -326,25 +326,6 @@ def proc_f1(proc_preds, proc_golds, ind2p, hadm_ids):
         y_proc[i] = gold_proc_inds
     return micro_f1(yhat_proc.ravel(), y_proc.ravel())
 
-def metrics_from_dicts(preds, golds, mdir, ind2c):
-    with open('%s/pred_100_scores_test.json' % mdir, 'r') as f:
-        scors = json.load(f)
-
-    hadm_ids = sorted(set(golds.keys()).intersection(set(preds.keys())))
-    num_labels = len(ind2c)
-    yhat = np.zeros((len(hadm_ids), num_labels))
-    yhat_raw = np.zeros((len(hadm_ids), num_labels))
-    y = np.zeros((len(hadm_ids), num_labels))
-    for i,hadm_id in tqdm(enumerate(hadm_ids)):
-        yhat_inds = [1 if ind2c[j] in preds[hadm_id] else 0 for j in range(num_labels)]
-        yhat_raw_inds = [scors[hadm_id][ind2c[j]] if ind2c[j] in scors[hadm_id] else 0 for j in range(num_labels)]
-        gold_inds = [1 if ind2c[j] in golds[hadm_id] else 0 for j in range(num_labels)]
-        yhat[i] = yhat_inds
-        yhat_raw[i] = yhat_raw_inds
-        y[i] = gold_inds
-    return yhat, yhat_raw, y, all_metrics(yhat, y, yhat_raw=yhat_raw, calc_auc=False)
-
-
 def union_size(yhat, y, axis):
     #axis=0 for label-level union (macro). axis=1 for instance-level
     return np.logical_or(yhat, y).sum(axis=axis).astype(float)
@@ -353,48 +334,19 @@ def intersect_size(yhat, y, axis):
     #axis=0 for label-level union (macro). axis=1 for instance-level
     return np.logical_and(yhat, y).sum(axis=axis).astype(float)
 
-def print_metrics(metrics, level=''):
+def print_metrics(metrics, level=None):
     print()
-    if level != '':
+    if level is not None:
         print('metrics ' + level + ' level')
-        level = '_' + level
+    else: level = ''
         
-    if "auc_macro"  + level in metrics.keys():
-        print("[MACRO] accuracy, precision, recall, f-measure, AUC")
-        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro" + level], metrics["prec_macro" + level], metrics["rec_macro" + level], metrics["f1_macro" + level], metrics["auc_macro" + level]))
-    else:
-        print("[MACRO] accuracy, precision, recall, f-measure")
-        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_macro" + level], metrics["prec_macro" + level], metrics["rec_macro" + level], metrics["f1_macro" + level]))
-
-    if "auc_micro" + level in metrics.keys():
-        print("[MICRO] accuracy, precision, recall, f-measure, AUC")
-        print("%.4f, %.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro" + level], metrics["prec_micro" + level], metrics["rec_micro" + level], metrics["f1_micro" + level], metrics["auc_micro" + level]))
-    else:
-        print("[MICRO] accuracy, precision, recall, f-measure")
-        print("%.4f, %.4f, %.4f, %.4f" % (metrics["acc_micro" + level], metrics["prec_micro" + level], metrics["rec_micro" + level], metrics["f1_micro" + level]))
+    print('{:>15s}{:>12s}{:>9s}{:>12s}{:>10s}{:>9s}'.format('[MACRO] jaccard', 'precision', 'recall', 'f-measure', 'ROC AUC', 'PR AUC'))
+    print('{:>15.4f}{:>12.4f}{:>9.4f}{:>12.4f}{:>10.4f}{:>9.4f}'.format(*[metrics['{}_{}_{}'.format(k,'macro',level)] for k in ["jac", "prec", "rec", "f1", "roc_auc", "pr_auc"]]))
+        
+    print('{:>15s}{:>12s}{:>9s}{:>12s}{:>10s}{:>9s}'.format('[MICRO] jaccard', 'precision', 'recall', 'f-measure', 'ROC AUC', 'PR AUC'))
+    print('{:>15.4f}{:>12.4f}{:>9.4f}{:>12.4f}{:>10.4f}{:>9.4f}'.format(*[metrics['{}_{}_{}'.format(k,'micro',level)] for k in ["jac", "prec", "rec", "f1", "roc_auc", "pr_auc"]]))
+    
     for metric, val in metrics.items():
-        if metric.find("rec_at" + level) != -1:
-            print("%s: %.4f" % (metric, val))
+        if metric.find("rec_at") != -1:
+            print("%s: %.4f" % (metric.replace('_'+level,''), val))
     print()
-
-if __name__ == "__main__":
-    if len(sys.argv) < 5:
-        print("usage: python " + str(os.path.basename(__file__) + " [train_dataset] [|Y| (as string)] [model_dir]"))
-        sys.exit(0)
-    train_path, Y, mdir = sys.argv[1], sys.argv[2], sys.argv[3]
-    ind2c, _ = datasets.load_full_codes(train_path)
-
-    diag_preds, diag_golds, proc_preds, proc_golds, golds, preds, hadm_ids, type_dicts = results_by_type(Y, mdir)
-    yhat, yhat_raw, y, metrics = metrics_from_dicts(preds, golds, mdir, ind2c)
-    print_metrics(metrics)
-
-    k = [5] if Y == '50' else [8,15]
-    prec_at_8 = precision_at_k(yhat_raw, y, k=8)
-    print("PRECISION@8: %.4f" % prec_at_8)
-    prec_at_15 = precision_at_k(yhat_raw, y, k=15)
-    print("PRECISION@15: %.4f" % prec_at_15)
-
-    f1_diag = diag_f1(diag_preds, diag_golds, type_dicts[0], hadm_ids)
-    f1_proc = proc_f1(proc_preds, proc_golds, type_dicts[1], hadm_ids)
-    print("[BY CODE TYPE] f1-diag f1-proc")
-    print("%.4f %.4f" % (f1_diag, f1_proc))
