@@ -16,7 +16,6 @@ from collections import defaultdict
 #from logger import Tensorboard
 import datasets
 import evaluation
-import interpret
 import persistence
 import models
 
