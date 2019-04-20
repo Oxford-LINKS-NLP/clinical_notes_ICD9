@@ -177,7 +177,8 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
     if embed_desc and gpu:
         desc_data = desc_data.cuda()
     
-    for batch_idx, tup in tqdm(enumerate(gen)):
+    t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
+    for batch_idx, tup in enumerate(t):
 
         data, target, target_coarse, _, _ = tup
         target_cat = torch.cat([target_coarse, target], dim=1)
@@ -206,10 +207,11 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         optimizer.step()
         #    optimizer.zero_grad()
         
-        if batch_idx % print_every == 0:
+        t.set_postfix(batch_size=batch_size, seq_length=seq_length, loss=np.mean(losses))
+        #if batch_idx % print_every == 0:
             #print the average loss of the last 10 batches
-            print("Train epoch: {} [batch #{}, batch_size {}, seq length {}]\tLoss: {:.6f}".format(
-                epoch, batch_idx, batch_size, seq_length, np.mean(losses[-10:])))
+        #    print("Train epoch: {} [batch #{}, batch_size {}, seq length {}]\tLoss: {:.6f}".format(
+        #        epoch, batch_idx, batch_size, seq_length, np.mean(losses[-10:])))
     return losses
 
 def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, model_dir):
@@ -234,7 +236,8 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
     if desc_data is not None and gpu:
         desc_data = desc_data.cuda()
 
-    for batch_idx, tup in tqdm(enumerate(gen)):
+    t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
+    for batch_idx, tup in enumerate(t):
         data, target, target_coarse, hadm_ids, data_text = tup
         target_cat = torch.cat([target_coarse, target], dim=1)
         
