@@ -252,7 +252,7 @@ class MimicDataset(Dataset):
         self.max_len = max_len
         
         self.notes_labeled['TEXT_PLAIN'] = self.notes_labeled['TEXT']
-        self.notes_labeled['TEXT'] = self.notes_labeled['TEXT'].apply(lambda text : np.array(list(filter(lambda x: x != -1, [int(w2ind.get(word) or len(w2ind)+1) for word in text])), dtype=np.int32))
+        self.notes_labeled['TEXT'] = self.notes_labeled['TEXT'].apply(lambda text : np.array([int(w2ind.get(word) or len(w2ind)+1) for word in text], dtype=np.int32))
         self.notes_labeled['LABELS_COARSE'] = self.notes_labeled['LABELS'].apply(lambda labels : np.array(list(set([idx for idx in ( int(c2ind_coarse.get(str(l).split('.')[0], -1)) for l in labels ) if idx != -1])), dtype=np.int32))
         self.notes_labeled['LABELS'] = self.notes_labeled['LABELS'].apply(lambda labels : np.array([idx for idx in ( int(c2ind.get(str(l), -1)) for l in labels ) if idx != -1], dtype=np.int32))
         

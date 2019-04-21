@@ -66,9 +66,9 @@ def train_epochs(args, model, optimizer, params, dicts):
     """
         Main loop. does train and test
     """
-    metrics_hist_train = defaultdict(lambda: [])
-    metrics_hist_dev = defaultdict(lambda: [])
-    metrics_hist_test = defaultdict(lambda: [])
+    metrics_hist_train = defaultdict(list)
+    metrics_hist_dev = defaultdict(list)
+    metrics_hist_test = defaultdict(list)
     
     test_only = args.test_model is not None
 
@@ -142,14 +142,17 @@ def train_epochs(args, model, optimizer, params, dicts):
     return epoch+1, metrics_hist_test
 
 def early_stop(metrics_hist, criterion, patience):
-    if not np.all(np.isnan(metrics_hist[criterion])):
-        if criterion == 'loss-dev': 
-            return np.nanargmin(metrics_hist[criterion]) > len(metrics_hist[criterion]) - patience
-        else:
-            return np.nanargmax(metrics_hist[criterion]) < len(metrics_hist[criterion]) - patience
-    else:
-        #keep training if criterion results have all been nan so far
+    
+    assert len(metrics_hist[criterion]) > 0
+        
+    #keep training if criterion results have all been nan so far
+    if np.all(np.isnan(metrics_hist[criterion])):
         return False
+        
+    if criterion == 'loss_dev': 
+        return np.nanargmin(metrics_hist[criterion]) > len(metrics_hist[criterion]) - patience
+    else:
+        return np.nanargmax(metrics_hist[criterion]) < len(metrics_hist[criterion]) - patience
 
 def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, gpu, dicts):
     """
@@ -164,8 +167,6 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
     #batch_size = 8
 
     losses = []
-    #how often to print some info to stdout
-    print_every = 25
 
     ind2w, w2ind, ind2c, c2ind, desc = dicts['ind2w'], dicts['w2ind'], dicts['ind2c'], dicts['c2ind'], dicts['desc']
 
@@ -207,10 +208,7 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         #    optimizer.zero_grad()
         
         t.set_postfix(batch_size=batch_size, seq_length=seq_length, loss=np.mean(losses))
-        #if batch_idx % print_every == 0:
-            #print the average loss of the last 10 batches
-        #    print("Train epoch: {} [batch #{}, batch_size {}, seq length {}]\tLoss: {:.6f}".format(
-        #        epoch, batch_idx, batch_size, seq_length, np.mean(losses[-10:])))
+        
     return losses
 
 def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, model_dir):
