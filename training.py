@@ -187,7 +187,7 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
             data, target, target_coarse = data.cuda(), target.cuda(), target_coarse.cuda()
             #target_cat = target_cat.cuda()
         
-        batch_size, seq_length = data.size()[0:2]
+        seq_length = data.size()[1]
         
         optimizer.zero_grad()
 
