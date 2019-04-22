@@ -53,8 +53,10 @@ class Attention(torch.nn.Module):
             self.weight = self.linear.weight
         
         else:
-            self.U = nn.Linear(n_dim, n_labels, bias=False)
-            self.weight = self.U.weight
+            self.U = nn.Parameter(torch.FloatTensor(n_labels, n_dim))
+            self.weight = self.U
+            #self.U = nn.Linear(n_dim, n_labels, bias=False)
+            #self.weight = self.U.weight
 
     def forward(self, x, desc_data=None):
 
@@ -65,7 +67,8 @@ class Attention(torch.nn.Module):
             desc_data = torch.tanh(self.linear(desc_data))
             alpha = self.softmax(desc_data.matmul(x.transpose(1,2)))
         else:
-            alpha = self.softmax(self.U(x).transpose(1,2))
+            #alpha = self.softmax(self.U(x).transpose(1,2))
+            alpha = self.softmax(self.U.matmul(x.transpose(1,2)))
 
         return alpha.matmul(x), alpha
         
@@ -93,74 +96,7 @@ class GRUEncoder(nn.Module):
         x, _ = self.gru(x)
         x = x.transpose(0,1).contiguous().view(s0, s1, -1)
         return self.linear(x)
-
-class ConvAttnPool(BaseModel):
-
-    def __init__(self, Y, dims, kernel_size, embed_matrix, gpu, vocab_size, Y_coarse=None, embed_size=100, embed_freeze=False, dropout=[0.5], hier=False, embed_desc=False, layer_norm=False, fine2coarse = None):
-        super(ConvAttnPool, self).__init__(Y, embed_matrix, vocab_size, dropout=dropout[0], gpu=gpu, embed_size=dims[0], embed_freeze=embed_freeze, hier=hier)
-        
-        self.conv = nn.Conv1d(self.embed_size, dims[1], kernel_size=kernel_size, padding=floor(kernel_size/2))
-        xavier_uniform(self.conv.weight)
-        
-        self.tanh = nn.Tanh()
-        
-        self.attention = Attention(dims[1], Y, embed_desc, desc_dim=self.embed_size)
-        xavier_uniform(self.attention.weight)
-        
-        self.layer_norm = nn.LayerNorm(torch.Size([dims[1]])) if layer_norm else None
-        
-        self.embed_desc = embed_desc
-        
-        self.final = nn.Linear(dims[1], Y, bias=True)
-        xavier_uniform(self.final.weight)
-        
-        self.sigmoid = nn.Sigmoid()
-        
-        if self.hier:
-            self.attention_coarse = Attention(dims[1], Y_coarse)
-            xavier_uniform(self.attention_coarse.weight)
-        
-            self.final_coarse = nn.Linear(dims[1], Y_coarse, bias=True)
-            xavier_uniform(self.final_coarse.weight)
-            
-            if fine2coarse is not None:
-                self.fine2coarse = torch.LongTensor(fine2coarse)
-
-    def forward(self, x, target, target_coarse=None, desc_data=None, get_attention=True):
-        
-        x = self.embed(x)
-        
-        x = self.embed_drop(x)
-        x = x.transpose(1, 2)
-
-        x = self.tanh(self.conv(x).transpose(1,2))
-        
-        if self.layer_norm is not None:
-            x = self.layer_norm(x)
-        
-        m, alpha = self.attention(x, self.embed(desc_data)) if self.embed_desc else self.attention(x)
-        
-        yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
-        
-        if self.hier:
-            m_coarse, alpha_coarse = self.attention_coarse(x)
-            yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
-            
-            mask = torch.round(self.sigmoid(yhat_coarse[:,self.fine2coarse]))
-            yhat = yhat * mask
-            loss = self._get_loss(yhat, target) + self._get_loss(yhat_coarse, target_coarse)
-            
-            yhat_coarse = self.sigmoid(yhat_coarse)
-            yhat = self.sigmoid(yhat)
-            
-            return (yhat, yhat_coarse), loss, (alpha, alpha_coarse)
-        else:
-            loss = self._get_loss(yhat, target)
-            
-            yhat = self.sigmoid(yhat)
-            
-            return yhat, loss, alpha
-                
+  
 class DummyModel(nn.Module):
     def __init__(self, Y, dicts, gpu, hier=False):
         super(DummyModel, self).__init__()
@@ -178,107 +114,6 @@ class DummyModel(nn.Module):
         attn = torch.cuda.FloatTensor(x.size(0), self.Y, x.size(1)).fill_(0)
         
         return yhat, F.binary_cross_entropy_with_logits(yhat, target), attn
-        
-class HierarchicalConvAttn(BaseModel):
-
-    def __init__(self, Y_fine, dims, kernel_size, embed_matrix, gpu, vocab_size, embed_freeze=False, dropout=[0.5, 0.5], hier=False, Y_coarse=None, fine2coarse=None, embed_desc=False, layer_norm=False):
-        super(HierarchicalConvAttn, self).__init__(Y_fine, embed_matrix, vocab_size, dropout=dropout[0], gpu=gpu, embed_size=dims[0], embed_freeze=embed_freeze, hier=hier)
-
-        assert dims[1]%2 == 0
-        
-        self.gru_words = nn.GRU(self.embed_size, int(dims[1]/2), bidirectional= True, batch_first=True)
-        self.linear_words = nn.Linear(dims[1], dims[1])
-        
-        self.tanh = nn.Tanh()
-        
-        self.attention_words = Attention(dims[1], 1)
-        xavier_uniform(self.attention_words.weight)
-        
-        self.sents_drop = nn.Dropout(p=dropout[1])
-        
-        self.conv_sents = nn.Conv1d(dims[1], dims[2], kernel_size=kernel_size, padding=floor(kernel_size/2))
-        xavier_uniform(self.conv_sents.weight)
-
-        self.attention_sents_fine = Attention(dims[2], Y_fine, embed_desc, desc_dim=self.embed_size)
-        xavier_uniform(self.attention_sents_fine.weight)
-        
-        self.final_fine = nn.Linear(dims[2], Y_fine, bias=True)
-        xavier_uniform(self.final_fine.weight)
-        
-        self.embed_desc = embed_desc
-        
-        self.layer_norm_words = nn.LayerNorm(torch.Size([dims[1]])) if layer_norm else None
-        self.layer_norm_sents = nn.LayerNorm(torch.Size([dims[2]])) if layer_norm else None
-
-        if self.hier:
-            self.attention_sents_coarse = Attention(dims[2], Y_coarse)
-            xavier_uniform(self.attention_sents_coarse.weight)
-        
-            self.final_coarse = nn.Linear(dims[2], Y_coarse, bias=True)
-            xavier_uniform(self.final_coarse.weight)
-            
-            if fine2coarse is not None:
-                self.fine2coarse = torch.LongTensor(fine2coarse)
-            
-            #self.drop_cat = nn.Dropout(p=0.5)
-            
-            #self.final_cat = nn.Linear(Y_coarse + Y_fine, Y_coarse + Y_fine, bias=True)
-            #xavier_uniform(self.final_coarse.weight)
-        
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, x, target_fine, target_coarse=None, target_cat=None, desc_data=None, get_attention=True):
-        
-        x = self.embed(x)
-        x = self.embed_drop(x)
-        
-        s0, s1, s2, s3 = x.size()
-        
-        x = x.view(s0*s1, s2, s3)
-        
-        x, _ = self.gru_words(x)
-        x = x.transpose(0,1).contiguous().view(s0*s1, s2, -1)
-        x = self.linear_words(x)
-        x = self.tanh(x)
-        
-        if self.layer_norm_words is not None:
-            x = self.layer_norm_words(x)
-        
-        x, alpha_words = self.attention_words(x)
-        
-        x = torch.squeeze(x)
-        
-        x = x.view(s0, s1, -1)
-        
-        x = self.sents_drop(x)
-        
-        x = x.transpose(1, 2)
-        
-        x = self.tanh(self.conv_sents(x).transpose(1,2))
-        
-        if self.layer_norm_sents is not None:
-            x = self.layer_norm_sents(x)
-        
-        m_fine, alpha_sents_fine = self.attention_sents_fine(x, self.embed(desc_data)) if self.embed_desc else self.attention_sents_fine(x)
-        yhat_fine = self.final_fine.weight.mul(m_fine).sum(dim=2).add(self.final_fine.bias)
-        
-        if self.hier:
-            m_coarse, alpha_sents_coarse = self.attention_sents_coarse(x)
-            yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
-
-            loss = self._get_loss(yhat_fine, target_fine) + self._get_loss(yhat_coarse, target_coarse)
-            
-            yhat_coarse = self.sigmoid(yhat_coarse)
-            yhat_fine = self.sigmoid(yhat_fine)
-            
-            return (yhat_fine, yhat_coarse), loss, (alpha_sents_fine, alpha_sents_coarse)
-        else:
-            loss = self._get_loss(yhat_fine, target_fine)
-            
-            yhat_fine = self.sigmoid(yhat_fine)
-            
-            return yhat_fine, loss, alpha_sents_fine
-            
 
 def attention(q, k, v, d_k, dropout=None): 
           
@@ -571,23 +406,26 @@ class ConvAttnPool(BaseModel):
         if self.layer_norm is not None:
             x = self.layer_norm(x)
         
-        m, alpha = self.attention(x, self.embed(desc_data)) if self.embed_desc else self.attention(x)
-        
-        yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
-        
         if self.hier:
             m_coarse, alpha_coarse = self.attention_coarse(x)
             yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
             
+            m, alpha = self.attention(x.detach(), self.embed(desc_data)) if self.embed_desc else self.attention(x.detach())
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
+            
             mask = torch.round(self.sigmoid(yhat_coarse[:,self.fine2coarse]))
             yhat = yhat * mask
+            
             loss = self._get_loss(yhat, target) + self._get_loss(yhat_coarse, target_coarse)
             
             yhat_coarse = self.sigmoid(yhat_coarse)
             yhat = self.sigmoid(yhat)
             
             return (yhat, yhat_coarse), loss, (alpha, alpha_coarse)
-        else:
+        else:    
+            m, alpha = self.attention(x, self.embed(desc_data)) if self.embed_desc else self.attention(x)
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
+            
             loss = self._get_loss(yhat, target)
             yhat = self.sigmoid(yhat)
             
@@ -681,4 +519,76 @@ class HierarchicalConvAttn(BaseModel):
             yhat_fine = self.sigmoid(yhat_fine)
             
             return yhat_fine, loss, alpha_sents_fine
+            
+class ConvDilated(BaseModel):
+
+    def __init__(self, Y, dims, kernel_size, dilation, embed_matrix, gpu, vocab_size, Y_coarse=None, embed_size=100, embed_freeze=False, dropout=[0.5], hier=False, embed_desc=False, layer_norm=False, fine2coarse = None):
+        super(ConvDilated, self).__init__(Y, embed_matrix, vocab_size, dropout=.0, gpu=gpu, embed_size=dims[0], embed_freeze=embed_freeze, hier=hier)
+        
+        assert len(dropout) == len(dims)-1
+        
+        self.drops = nn.ModuleList([nn.Dropout(p=drop) for drop in dropout])
+        
+        self.convs = nn.ModuleList([nn.Conv1d(dims[i], dims[i+1], kernel_size=kernel_size, dilation=dilation[i], padding=floor(kernel_size/2)*dilation[i]) for i in range(len(self.drops))])
+        
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(torch.Size([dims[i+1]])) for i in range(0,len(self.drops))])
+        
+        self.tanh = nn.Tanh()
+        
+        self.attention = Attention(dims[-1], Y, embed_desc, desc_dim=self.embed_size)
+        xavier_uniform(self.attention.weight)
+        
+        self.embed_desc = embed_desc
+        
+        self.final = nn.Linear(dims[-1], Y, bias=True)
+        xavier_uniform(self.final.weight)
+        
+        self.sigmoid = nn.Sigmoid()
+        
+        if self.hier:
+            self.attention_coarse = Attention(dims[-1], Y_coarse)
+            xavier_uniform(self.attention_coarse.weight)
+        
+            self.final_coarse = nn.Linear(dims[-1], Y_coarse, bias=True)
+            xavier_uniform(self.final_coarse.weight)
+            
+            if fine2coarse is not None:
+                self.fine2coarse = torch.LongTensor(fine2coarse)
+
+    def forward(self, x, target, target_coarse=None, desc_data=None, get_attention=True):
+        
+        x = self.embed(x)
+        
+        for i in range(len(self.convs)):
+            x = self.drops[i](x)
+            x = x.transpose(1,2)
+            x = self.convs[i](x)
+            x = x.transpose(1,2)
+            x = self.tanh(x)
+            x = self.layer_norms[i](x)
+
+        if self.hier:
+            m_coarse, alpha_coarse = self.attention_coarse(x)
+            yhat_coarse = self.final_coarse.weight.mul(m_coarse).sum(dim=2).add(self.final_coarse.bias)
+            
+            m, alpha = self.attention(x.detach(), self.embed(desc_data)) if self.embed_desc else self.attention(x.detach())
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
+            
+            mask = torch.round(self.sigmoid(yhat_coarse[:,self.fine2coarse]))
+            yhat = yhat * mask
+            
+            loss = self._get_loss(yhat, target) + self._get_loss(yhat_coarse, target_coarse)
+            
+            yhat_coarse = self.sigmoid(yhat_coarse)
+            yhat = self.sigmoid(yhat)
+            
+            return (yhat, yhat_coarse), loss, (alpha, alpha_coarse)
+        else:    
+            m, alpha = self.attention(x, self.embed(desc_data)) if self.embed_desc else self.attention(x)
+            yhat = self.final.weight.mul(m).sum(dim=2).add(self.final.bias)
+            
+            loss = self._get_loss(yhat, target)
+            yhat = self.sigmoid(yhat)
+            
+            return yhat, loss, alpha
             

@@ -273,12 +273,12 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
  
         del data, loss
         
-        if fold == 'test':
-            #alpha, _ = torch.max(torch.round(output).unsqueeze(-1).expand_as(alpha) * alpha, 1)
-            #alpha = (torch.round(output).byte() | target.byte()).unsqueeze(-1).expand_as(alpha).type('torch.cuda.FloatTensor') * alpha
-            alpha = [a for a in [a_m for a_m in alpha.data.cpu().numpy()]]
-        else:
-            alpha = []
+        #if fold == 'test':
+            ##alpha, _ = torch.max(torch.round(output).unsqueeze(-1).expand_as(alpha) * alpha, 1)
+            ##alpha = (torch.round(output).byte() | target.byte()).unsqueeze(-1).expand_as(alpha).type('torch.cuda.FloatTensor') * alpha
+        #    alpha = [a for a in [a_m for a_m in alpha.data.cpu().numpy()]]
+        #else:
+        #    alpha = []
         
         del target
         
@@ -292,7 +292,6 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
         hids.extend(hadm_ids)
         docs.extend(data_text)
         #attention.extend(alpha)
-        attention.extend(alpha)
         
     level = ''
     k = 5 if len(ind2c) == 50 else [8,15]
@@ -314,8 +313,8 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
     metrics.update(metrics_coarse)
 
     #write the predictions
-    if fold == 'test':
-        persistence.write_preds(hids, docs, attention, y, yhat, yhat_raw, metrics_inst, model_dir, fold, ind2c, c2ind, dicts['desc_plain'])
+    #if fold == 'test':
+    #    persistence.write_preds(hids, docs, attention, y, yhat, yhat_raw, metrics_inst, model_dir, fold, ind2c, c2ind, dicts['desc_plain'])
     
     return metrics, metrics_codes, metrics_inst, hids
     
@@ -337,6 +336,11 @@ def pick_model(args, dicts):
                     
     if args.model == "dummy":
         model = models.DummyModel(Y, dicts, args.gpu)
+    elif args.model == "conv_dilated":
+        model = models.ConvDilated(Y, args.dims, args.filter_size, args.dilation, word_embeddings_matrix, args.gpu, vocab_size,
+                                    embed_freeze=args.embed_freeze, dropout=args.dropout,
+                                    hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
+                                    embed_desc=args.embed_desc, layer_norm=args.layer_norm)
     elif args.model == "conv_attn":
         model = models.ConvAttnPool(Y, args.dims, args.filter_size, word_embeddings_matrix, args.gpu, vocab_size,
                                     embed_freeze=args.embed_freeze, dropout=args.dropout,
@@ -397,7 +401,7 @@ if __name__ == "__main__":
                         help="path to a file containing train data. dev/test splits assumed to have same name format with 'train' replaced by 'dev' and 'test'")
     parser.add_argument("vocab", type=str, help="path to a file holding vocab word list for discretizing words")
     parser.add_argument("Y", type=str, help="size of label space")
-    parser.add_argument("model", type=str, choices=["conv_attn", "hier_conv_attn", "dummy"], help="model")
+    parser.add_argument("model", type=str, choices=["conv_dilated", "conv_attn", "hier_conv_attn", "dummy"], help="model")
     parser.add_argument("dims", type=lambda s: [int(dim) for dim in s.split(',')], help="layers dimensions")
     parser.add_argument("--n-epochs", type=int, required=True, dest="n_epochs", help="number of epochs to train")
     parser.add_argument("--embed-file", type=str, required=False, dest="embed_file",
@@ -410,6 +414,8 @@ if __name__ == "__main__":
                         help="optional flag to shuffle training dataset at each epoch")                    
     parser.add_argument("--filter-size", type=int, required=False, dest="filter_size", default=5,
                         help="size of convolution filter to use. (default: 5)")
+    parser.add_argument("--dilation", dest="dilation", type=lambda s: [int(dil) for dil in s.split(',')], required=False, default=[1],
+                        help="optional specification of dilation (default: 1)")
     parser.add_argument("--weight-decay", type=float, required=False, dest="weight_decay", default=0,
                         help="coefficient for penalizing l2 norm of model weights (default: 0)")
     parser.add_argument("--lr", type=float, required=False, dest="lr", default=1e-3,
