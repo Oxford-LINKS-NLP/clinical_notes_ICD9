@@ -51,6 +51,7 @@ class Attention(torch.nn.Module):
             self.gru_labels = nn.GRU(desc_dim, int(n_dim/2), bidirectional= True, batch_first=True)
             self.linear = nn.Linear(n_dim, n_dim)
             self.weight = self.linear.weight
+            self.activation = nn.Tanh()
         
         else:
             self.U = nn.Parameter(torch.FloatTensor(n_labels, n_dim))
@@ -64,7 +65,7 @@ class Attention(torch.nn.Module):
             n_labels = desc_data.size(0)
             _, desc_data = self.gru_labels(desc_data)
             desc_data = desc_data.transpose(0,1).contiguous().view(n_labels,-1)
-            desc_data = torch.tanh(self.linear(desc_data))
+            desc_data = self.activation(self.linear(desc_data))
             alpha = self.softmax(desc_data.matmul(x.transpose(1,2)))
         else:
             #alpha = self.softmax(self.U(x).transpose(1,2))
@@ -139,7 +140,7 @@ class MultiHeadConvAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
         self.out = nn.Linear(d_model, d_model)
         
-        self.tanh = nn.Tanh()
+        self.activation = nn.Tanh()
         
         xavier_uniform(self.q_conv.weight)
         xavier_uniform(self.v_conv.weight)
@@ -160,9 +161,9 @@ class MultiHeadConvAttention(nn.Module):
         q = self.q_conv(q.transpose(1,2)).transpose(1,2).view(bs, -1, self.h, self.d_k)
         v = self.v_conv(v.transpose(1,2)).transpose(1,2).view(bs, -1, self.h, self.d_k)
         
-        k = self.tanh(k)
-        q = self.tanh(q)
-        v = self.tanh(v)
+        k = self.activation(k)
+        q = self.activation(q)
+        v = self.activation(v)
         
         # transpose to get dimensions bs * h * sl * d_model
 
@@ -239,7 +240,7 @@ class MultiHeadConvTargetAttention(nn.Module):
         self.d_k = d_model // heads 
         self.h = heads 
         
-        self.tanh = nn.Tanh()
+        self.activation = nn.Tanh()
   
         self.q = nn.Parameter(torch.zeros(Y, d_model))
         
@@ -268,9 +269,9 @@ class MultiHeadConvTargetAttention(nn.Module):
         q = self.q.view(-1, self.h, self.d_k) 
         v = self.v_conv(v.transpose(1,2)).transpose(1,2).view(bs, -1, self.h, self.d_k)
 
-        k = self.tanh(k)
-        q = self.tanh(q)
-        v = self.tanh(v)
+        k = self.activation(k)
+        q = self.activation(q)
+        v = self.activation(v)
           
         # transpose to get dimensions bs * h * sl * d_model 
   
@@ -371,7 +372,7 @@ class ConvAttnPool(BaseModel):
         
         self.conv = ConvEncoder(dims[0], dims[1], kernel_size, padding=True)
         
-        self.tanh = nn.Tanh()
+        self.activation = nn.Tanh()
         
         self.attention = Attention(dims[1], Y, embed_desc, desc_dim=self.embed_size)
         xavier_uniform(self.attention.weight)
@@ -401,7 +402,7 @@ class ConvAttnPool(BaseModel):
         
         x = self.embed_drop(x)
         
-        x = self.tanh(self.conv(x))
+        x = self.activation(self.conv(x))
         
         if self.layer_norm is not None:
             x = self.layer_norm(x)
@@ -440,7 +441,7 @@ class HierarchicalConvAttn(BaseModel):
         
         self.gru_words = GRUEncoder(dims[0], dims[1])
         
-        self.tanh = nn.Tanh()
+        self.activation = nn.Tanh()
         
         self.attention_words = Attention(dims[1], 1)
         xavier_uniform(self.attention_words.weight)
@@ -482,7 +483,7 @@ class HierarchicalConvAttn(BaseModel):
         x = x.view(s0*s1, s2, s3)
         
         x = self.gru_words(x)
-        x = self.tanh(x)
+        x = self.activation(x)
         
         if self.layer_norm_words is not None:
             x = self.layer_norm_words(x)
@@ -495,7 +496,7 @@ class HierarchicalConvAttn(BaseModel):
         
         x = self.sents_drop(x)
         
-        x = self.tanh(self.conv_sents(x))
+        x = self.activation(self.conv_sents(x))
         
         if self.layer_norm_sents is not None:
             x = self.layer_norm_sents(x)
@@ -533,7 +534,7 @@ class ConvDilated(BaseModel):
         
         self.layer_norms = nn.ModuleList([nn.LayerNorm(torch.Size([dims[i+1]])) for i in range(0,len(self.drops))])
         
-        self.tanh = nn.Tanh()
+        self.activation = nn.Tanh()
         
         self.attention = Attention(dims[-1], Y, embed_desc, desc_dim=self.embed_size)
         xavier_uniform(self.attention.weight)
@@ -564,7 +565,7 @@ class ConvDilated(BaseModel):
             x = x.transpose(1,2)
             x = self.convs[i](x)
             x = x.transpose(1,2)
-            x = self.tanh(x)
+            x = self.activation(x)
             x = self.layer_norms[i](x)
 
         if self.hier:
