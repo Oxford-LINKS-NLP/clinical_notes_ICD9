@@ -93,8 +93,7 @@ def train_epochs(args, model, optimizer, params, dicts):
    
         losses = train(model, optimizer, args.Y, epoch, args.batch_size, args.embed_desc, dataset_train, args.shuffle, args.gpu, dicts)
         loss = np.mean(losses)
-        print("epoch loss: " + str(loss))
-
+        
         metrics_train = {'loss': loss}
 
         fold ='dev'
@@ -292,6 +291,8 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
         hids.extend(hadm_ids)
         docs.extend(data_text)
         #attention.extend(alpha)
+        
+        t.set_postfix(loss=np.mean(losses))
         
     level = ''
     k = 5 if len(ind2c) == 50 else [8,15]
