@@ -3,8 +3,8 @@
 """
 import csv
 import json
+import os
 
-import math
 import numpy as np
 import torch
 
@@ -13,8 +13,8 @@ import pandas as pd
 top_10_codes = ['401.9', '38.93', '428.0', '427.31', '414.01', '96.04', '96.6', '584.9', '250.00' ,'96.71']
 
 def save_metrics(dicts, metrics_hist, model_dir, metrics_codes=None, metrics_inst=None, hadm_ids=None, test_only=False):
-    filename = "/metrics.json" if not test_only else "/metrics_test_only.json"
-    with open(model_dir + filename, 'w') as metrics_file:
+    filename = "metrics.json" if not test_only else "/metrics_test_only.json"
+    with open(os.path.join(model_dir, filename), 'w') as metrics_file:
         #concatenate train, dev and test metrics into one dict
         metrics_hist_train, metrics_hist_dev, metrics_hist_test = metrics_hist
         data = {}
@@ -200,24 +200,30 @@ def write_preds(hids, docs, attns, ys, yhats, yhats_raw, metrics, model_dir, fol
     #with open(out_path, 'w') as f:
     #    json.dump(output, f, indent=1)
 
-def save_everything(args, dicts, metrics_hist_all, model, model_dir, params, criterion, metrics_codes=None, metrics_inst=None, hadm_ids=None, evaluate=False, test_only=False):
+def save_everything(args, dicts, metrics_hist_all, model, optimizer, model_dir, params, criterion, metrics_codes=None, metrics_inst=None, hadm_ids=None, evaluate=False, test_only=False):
     """
         Save metrics, model, params all in model_dir
     """
     save_metrics(dicts, metrics_hist_all, model_dir, metrics_codes=metrics_codes, metrics_inst=metrics_inst, hadm_ids=hadm_ids, test_only=test_only)
     params['model_dir'] = model_dir
     save_params_dict(params)
-
-    if not evaluate and not test_only:
-        sd = model.cpu().state_dict()
-        torch.save(sd, model_dir + "/model_last_epoch.pth")
-
-        #save the model with the best criterion metric
-        if not np.all(np.isnan(metrics_hist_all[1][criterion])):
-            if np.nanargmax(metrics_hist_all[1][criterion]) == len(metrics_hist_all[1][criterion]) - 1:
-                #save state dict
-                sd = model.state_dict()
-                torch.save(sd, model_dir + "/model_best_%s.pth" % criterion)
-        if args.gpu:
-            model.cuda()
-    print("saved metrics, params, model to directory %s\n" % (model_dir))
+    
+    if evaluate or test_only:
+        print("saved metrics to directory %s\n" % (model_dir))
+        return
+        
+    sd = model.cpu().state_dict()
+    torch.save(sd, os.path.join(model_dir, "model_last_epoch.pth"))
+    
+    sd_opt = optimizer.state_dict()
+    sd_opt['epoch'] = metrics_hist_all[0]['epochs']
+    torch.save(sd_opt, os.path.join(model_dir, "optim_last_epoch.pth"))
+    
+    #save the model with the best criterion metric
+    if not np.all(np.isnan(metrics_hist_all[1][criterion])):
+        if np.nanargmax(metrics_hist_all[1][criterion]) == len(metrics_hist_all[1][criterion]) - 1:
+            torch.save(sd, os.path.join(model_dir, "model_best_{}.pth".format(criterion)))
+            torch.save(sd_opt, os.path.join(model_dir, "optim_best_{}.pth".format(criterion)))
+    if args.gpu:
+        model.cuda()
+    print("saved metrics, params, model, optmizer state to directory %s\n" % (model_dir))

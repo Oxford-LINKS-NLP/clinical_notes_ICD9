@@ -10,6 +10,7 @@ import os
 import numpy as np
 import sys
 import time
+import json
 from tqdm import tqdm
 from collections import defaultdict
 
@@ -35,7 +36,10 @@ def main(args, reporter=None):
         from datasets import collate
     
     epochs_trained, metrics_hist_test = train_epochs(args, model, optimizer, params, dicts)
-    print("TOTAL ELAPSED TIME FOR {} MODEL AND {} EPOCHS: {}".format(args.model, epochs_trained, round(time.time() - start)))
+    elapsed = round(time.time() - start)
+    m, s = divmod(elapsed, 60)
+    h, m = divmod(m, 60)
+    print("TOTAL ELAPSED TIME FOR {} MODEL AND {} EPOCHS: {:d}:{:02d}:{:02d}".format(args.model, epochs_trained, h, m, s))
     return metrics_hist_test
 
 def init(args):
@@ -48,16 +52,10 @@ def init(args):
 
     dicts = datasets.load_lookups(args, hier=args.hier)
 
-    model = pick_model(args, dicts)
+    model, optimizer = init_model(args, dicts)
         
     print(model)
 
-    if not args.test_model and not args.model == 'dummy':
-        optimizer = optim.Adam(model.parameters(), weight_decay=args.weight_decay, lr=args.lr)
-    else:
-        optimizer = None
-
-    #params = tools.make_param_dict(args)
     params = vars(args)
     
     return args, model, optimizer, params, dicts
@@ -70,18 +68,30 @@ def train_epochs(args, model, optimizer, params, dicts):
     metrics_hist_dev = defaultdict(list)
     metrics_hist_test = defaultdict(list)
     
+    if args.resume:
+        metrics_file = os.path.join(os.path.dirname(os.path.abspath(args.resume)), 'metrics.json')
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r') as metrics_fp:
+                metrics = json.load(metrics_fp)
+            metrics_hist_train.update({k.replace('_train', '') : v for k, v in metrics.items() if k.endswith('_train')})                
+            metrics_hist_dev.update({k.replace('_dev', '') : v for k, v in metrics.items() if k.endswith('_dev')})
+            metrics_hist_test.update({k.replace('_test', '') : v for k, v in metrics.items() if k.endswith('_test')})
+            
     test_only = args.test_model is not None
 
     num_labels_fine = len(dicts['ind2c'])
     num_labels_coarse = len(dicts['ind2c_coarse'])
 
-    epoch = 0
+    epoch = 0 if args.resume is None else args.epoch
     
     if not test_only:
         dataset_train = MimicDataset(args.data_path, dicts, num_labels_fine, num_labels_coarse, args.max_len)
         dataset_dev = MimicDataset(args.data_path.replace('train', 'dev'), dicts, num_labels_fine, num_labels_coarse, args.max_len)
-        model_dir = os.path.join(args.models_dir, '_'.join([args.model, time.strftime('%Y-%m-%d_%H:%M:%S')]))
-        os.mkdir(model_dir)
+        if args.resume is None:
+            model_dir = os.path.join(args.models_dir, '_'.join([args.model, time.strftime('%Y-%m-%d_%H:%M:%S')]))
+            os.mkdir(model_dir)
+        else:
+            model_dir = os.path.dirname(os.path.abspath(args.resume))
     else:
         model_dir = os.path.dirname(os.path.abspath(args.test_model))
 
@@ -89,7 +99,7 @@ def train_epochs(args, model, optimizer, params, dicts):
     #tensorboard = Tensorboard(model_dir)
     
     #train for n_epochs unless criterion metric does not improve for [patience] epochs
-    for epoch in range(args.n_epochs if not test_only else 0):
+    for epoch in range(epoch, args.n_epochs if not test_only else 0):
    
         losses = train(model, optimizer, args.Y, epoch, args.batch_size, args.embed_desc, dataset_train, args.shuffle, args.gpu, dicts)
         loss = np.mean(losses)
@@ -112,8 +122,8 @@ def train_epochs(args, model, optimizer, params, dicts):
 
         metrics_hist_all = (metrics_hist_train, metrics_hist_dev, None)
 
-        #save metrics, model, params
-        persistence.save_everything(args, dicts, metrics_hist_all, model, model_dir, params, args.criterion, evaluate=False, test_only=False)
+        #save metrics, model, optimizer state, params
+        persistence.save_everything(args, dicts, metrics_hist_all, model, optimizer, model_dir, params, args.criterion, evaluate=False, test_only=False)
 
         if args.criterion is not None:
             if early_stop(metrics_hist_dev, args.criterion, args.patience):
@@ -136,7 +146,7 @@ def train_epochs(args, model, optimizer, params, dicts):
     #tensorboard.close()
         
     #save metrics, model, params
-    persistence.save_everything(args, dicts, metrics_hist_all, model, model_dir, params, args.criterion, metrics_codes=metrics_codes, metrics_inst=metrics_inst, hadm_ids=hadm_ids, evaluate=True, test_only=test_only)
+    persistence.save_everything(args, dicts, metrics_hist_all, model, optimizer, model_dir, params, args.criterion, metrics_codes=metrics_codes, metrics_inst=metrics_inst, hadm_ids=hadm_ids, evaluate=True, test_only=test_only)
 
     return epoch+1, metrics_hist_test
 
@@ -319,15 +329,17 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
     
     return metrics, metrics_codes, metrics_inst, hids
     
-def pick_model(args, dicts):
+def init_model(args, dicts):
     """
         Use args to initialize the appropriate model
     """
+    
+    assert not (args.test_model is not None and args.resume is not None)
 
     Y = len(dicts['ind2c'])
     Y_coarse = len(dicts['ind2c_coarse']) if args.hier else None
     
-    if args.embed_file and not args.test_model:
+    if args.embed_file and not (args.test_model or args.resume):
         print("loading pretrained embeddings (freeze={0}, normalize={1})...".format(args.embed_freeze, args.embed_normalize))            
         word_embeddings_matrix = load_embeddings(args.embed_file, dicts['ind2w'], args.dims[0], args.embed_normalize)
     else:
@@ -356,11 +368,26 @@ def pick_model(args, dicts):
     if args.test_model:
         sd = torch.load(os.path.abspath(args.test_model))
         model.load_state_dict(sd)
+        
+    if args.resume:
+        sd = torch.load(os.path.abspath(args.resume))
+        model.load_state_dict(sd)
 
     if args.gpu:
         model.cuda()
+        
+    if not args.test_model and not args.model == 'dummy':
+        optimizer = optim.Adam(model.parameters(), weight_decay=args.weight_decay, lr=args.lr)
+        if args.resume:
+            model_dir = os.path.dirname(os.path.abspath(args.resume))
+            model_file = os.path.basename(os.path.abspath(args.resume))
+            sd_opt = torch.load(os.path.join(model_dir, model_file.replace('model', 'optim')))
+            args.epoch = sd_opt.pop('epoch')
+            optimizer.load_state_dict(sd_opt)
+    else:
+        optimizer = None
 
-    return model
+    return model, optimizer
     
 def load_embeddings(embed_file, ind2w, embed_size, embed_normalize):
     word_embeddings = {}
@@ -426,6 +453,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", dest="dropout", type=lambda s: [float(drop) for drop in s.split(',')], required=False, default=[0.5],
                         help="optional specification of dropout (default: 0.5)")
     parser.add_argument("--test-model", type=str, dest="test_model", required=False, help="path to a saved model to load and evaluate")
+    parser.add_argument("--resume", type=str, dest="resume", required=False, help="path to a saved model to resume training")
     parser.add_argument("--models-dir", type=str, dest="models_dir", required=True, help="path to saved models directory")
     parser.add_argument("--data-dir", type=str, dest="data_dir", required=True, help="path to mimic data directory")
     parser.add_argument("--criterion", type=str, default='f1_micro', required=False, dest="criterion",
