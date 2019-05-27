@@ -13,7 +13,7 @@ import pandas as pd
 top_10_codes = ['401.9', '38.93', '428.0', '427.31', '414.01', '96.04', '96.6', '584.9', '250.00' ,'96.71']
 
 def save_metrics(dicts, metrics_hist, model_dir, metrics_codes=None, metrics_inst=None, hadm_ids=None, test_only=False):
-    filename = "metrics.json" if not test_only else "/metrics_test_only.json"
+    filename = "metrics.json" if not test_only else "metrics_test_only.json"
     with open(os.path.join(model_dir, filename), 'w') as metrics_file:
         #concatenate train, dev and test metrics into one dict
         metrics_hist_train, metrics_hist_dev, metrics_hist_test = metrics_hist
@@ -35,7 +35,7 @@ def save_metrics(dicts, metrics_hist, model_dir, metrics_codes=None, metrics_ins
                 f2_writer.writerow(row)
 
 def save_params_dict(params):
-    with open(params["model_dir"] + "/params.json", 'w') as params_file:
+    with open(os.path.join(params["model_dir"], "params.json"), 'w') as params_file:
         json.dump(params, params_file, indent=1)
 
 def write_docs_top_10(model_dir, fold, df, c2ind):
@@ -206,7 +206,9 @@ def save_everything(args, dicts, metrics_hist_all, model, optimizer, model_dir, 
     """
     save_metrics(dicts, metrics_hist_all, model_dir, metrics_codes=metrics_codes, metrics_inst=metrics_inst, hadm_ids=hadm_ids, test_only=test_only)
     params['model_dir'] = model_dir
-    save_params_dict(params)
+    
+    if not test_only:
+        save_params_dict(params)
     
     if evaluate or test_only:
         print("saved metrics to directory %s\n" % (model_dir))
