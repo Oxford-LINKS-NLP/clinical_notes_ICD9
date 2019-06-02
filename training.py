@@ -5,6 +5,10 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 
+from datasets import MimicDataset
+from datasets import collate
+
+
 import argparse
 import os 
 import numpy as np
@@ -25,15 +29,6 @@ num_workers = 0
 def main(args, reporter=None):
     start = time.time()
     args, model, optimizer, params, dicts = init(args)
-
-    global MimicDataset
-    global collate
-    if args.model == 'hier_conv_attn':
-        from datasets import MimicDatasetSentences as MimicDataset
-        from datasets import collate_sentences as collate
-    else:
-        from datasets import MimicDataset
-        from datasets import collate
     
     epochs_trained, metrics_hist_test = train_epochs(args, model, optimizer, params, dicts)
     elapsed = round(time.time() - start)
@@ -95,7 +90,6 @@ def train_epochs(args, model, optimizer, params, dicts):
     else:
         model_dir = os.path.dirname(os.path.abspath(args.test_model))
 
-    dataset_test = MimicDataset(args.data_path.replace('train', 'test'), dicts, num_labels_fine, num_labels_coarse, args.max_len)
     #tensorboard = Tensorboard(model_dir)
     
     #train for n_epochs unless criterion metric does not improve for [patience] epochs
@@ -128,11 +122,24 @@ def train_epochs(args, model, optimizer, params, dicts):
         if args.criterion is not None:
             if early_stop(metrics_hist_dev, args.criterion, args.patience):
                 #stop training, evaluate on test set and then stop the script
-                print("%s hasn't improved in %d epochs, early stopping..." % (args.criterion, args.patience))
+                print('{} hasn\'t improved in {} epochs, early stopping...'.format(args.criterion, args.patience))
                 break
 
     fold = 'test'            
     print("\nevaluating on test")
+    
+    dataset_train = None
+    dataset_dev = None
+    del dataset_train, dataset_dev
+
+    model_best_sd = torch.load(os.path.join(model_dir, 'model_best_{}.pth'.format(args.criterion)))
+    model.load_state_dict(model_best_sd)
+    
+    if args.gpu:
+        model.cuda()
+    
+    dataset_test = MimicDataset(args.data_path.replace('train', 'test'), dicts, num_labels_fine, num_labels_coarse, args.max_len)
+    
     with torch.no_grad():
         metrics_test, metrics_codes, metrics_inst, hadm_ids = test(model, args.Y, epoch, dataset_test, args.batch_size, args.embed_desc,fold, args.gpu, dicts, model_dir)
     
@@ -184,17 +191,15 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         
     desc_data = desc
     if embed_desc and gpu:
-        desc_data = desc_data.cuda()
+        desc_data = (desc_data[0].cuda(), desc_data[1], desc_data[2])
     
     t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
     for batch_idx, tup in enumerate(t):
 
         data, target, target_coarse, _, _ = tup
-        target_cat = torch.cat([target_coarse, target], dim=1)
 
         if gpu:
             data, target, target_coarse = data.cuda(), target.cuda(), target_coarse.cuda()
-            #target_cat = target_cat.cuda()
         
         seq_length = data.size()[1]
         
@@ -217,7 +222,7 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         #    optimizer.zero_grad()
         
         t.set_postfix(batch_size=batch_size, seq_length=seq_length, loss=np.mean(losses))
-        
+    
     return losses
 
 def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, model_dir):
@@ -239,17 +244,15 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
     gen = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers, collate_fn=collate)
 
     desc_data = desc
-    if desc_data is not None and gpu:
-        desc_data = desc_data.cuda()
+    if embed_desc and gpu:
+        desc_data = (desc_data[0].cuda(), desc_data[1], desc_data[2])
 
     t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
     for batch_idx, tup in enumerate(t):
         data, target, target_coarse, hadm_ids, data_text = tup
-        target_cat = torch.cat([target_coarse, target], dim=1)
         
         if gpu:
             data, target, target_coarse = data.cuda(), target.cuda(), target_coarse.cuda()
-            #target_cat = target_cat.cuda()
 
         model.zero_grad()
 
@@ -353,14 +356,9 @@ def init_model(args, dicts):
         model = models.ConvDilated(Y, args.dims, args.filter_size, args.dilation, word_embeddings_matrix, args.gpu, vocab_size,
                                     embed_freeze=args.embed_freeze, dropout=args.dropout,
                                     hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
-                                    embed_desc=args.embed_desc, layer_norm=args.layer_norm)
+                                    embed_desc=args.embed_desc)
     elif args.model == "conv_attn":
         model = models.ConvAttnPool(Y, args.dims, args.filter_size, word_embeddings_matrix, args.gpu, vocab_size,
-                                    embed_freeze=args.embed_freeze, dropout=args.dropout,
-                                    hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
-                                    embed_desc=args.embed_desc, layer_norm=args.layer_norm)
-    elif args.model == "hier_conv_attn":
-        model = models.HierarchicalConvAttn(Y, args.dims, args.filter_size, word_embeddings_matrix, args.gpu, vocab_size,
                                     embed_freeze=args.embed_freeze, dropout=args.dropout,
                                     hier=args.hier, Y_coarse=Y_coarse, fine2coarse=dicts['fine2coarse'],
                                     embed_desc=args.embed_desc, layer_norm=args.layer_norm)
@@ -429,7 +427,7 @@ if __name__ == "__main__":
                         help="path to a file containing train data. dev/test splits assumed to have same name format with 'train' replaced by 'dev' and 'test'")
     parser.add_argument("vocab", type=str, help="path to a file holding vocab word list for discretizing words")
     parser.add_argument("Y", type=str, help="size of label space")
-    parser.add_argument("model", type=str, choices=["conv_dilated", "conv_attn", "hier_conv_attn", "dummy"], help="model")
+    parser.add_argument("model", type=str, choices=["conv_dilated", "conv_attn", "dummy"], help="model")
     parser.add_argument("dims", type=lambda s: [int(dim) for dim in s.split(',')], help="layers dimensions")
     parser.add_argument("--n-epochs", type=int, required=True, dest="n_epochs", help="number of epochs to train")
     parser.add_argument("--embed-file", type=str, required=False, dest="embed_file",

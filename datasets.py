@@ -81,10 +81,14 @@ def load_lookups(args, hier=False):
     codes_desc = [desc_plain[code] for _, code in sorted(ind2c.items())] if args.embed_desc else None
     ind2w, w2ind = load_vocab_dict(args, args.vocab, codes_desc=codes_desc)
     
-    desc = [np.array([int(w2ind.get(word, len(w2ind)+1)) for word in desc_plain[code]], dtype=np.int32) for _, code in sorted(ind2c.items())]
-    m = max([len(text) for text in desc])
-    desc = torch.LongTensor(np.array([np.pad(text, (0, m-len(text)), 'constant') for text in desc]))
+    #desc = [np.array([int(w2ind.get(word, len(w2ind)+1)) for word in desc_plain[code]], dtype=np.int32) for _, code in sorted(ind2c.items())]
+    #m = max([len(text) for text in desc])
+    #desc = torch.LongTensor(np.array([np.pad(text, (0, m-len(text)), 'constant') for text in desc]))
     
+    desc = [torch.LongTensor([int(w2ind.get(word, len(w2ind)+1)) for word in desc_plain[code]]) for _, code in sorted(ind2c.items())]
+    
+    desc = torch.nn.utils.rnn.pad_sequence(desc, batch_first=True, padding_value=0)
+            
     c2ind = {str(c):i for i,c in ind2c.items()}
     c2ind_coarse = {str(c):i for i,c in ind2c_coarse.items()}
     fine2coarse = np.zeros(len(ind2c))
@@ -287,10 +291,8 @@ def collate(batch):
 
     data, target_fine, target_coarse, hadm_ids, docs = zip(*batch)
 
-    max_length = max(map(len, data))
-    data = [F.pad(tensor, (0, max_length - len(tensor)), 'constant') for tensor in data]
-    data = torch.stack(data)
-
+    data = torch.nn.utils.rnn.pad_sequence(data, batch_first=True, padding_value=0)
+    
     target_fine = torch.stack(target_fine)
     target_coarse = torch.stack(target_coarse)
 
