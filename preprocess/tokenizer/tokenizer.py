@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import re2 as re
+import string
 from timeit import default_timer as timer
 
 import en_core_web_md as english_model
@@ -19,17 +20,27 @@ class Tokenizer(object):
 		self.nlp.remove_pipe('tagger')
 		self.nlp.remove_pipe('ner')
 		
-		prefixes_custom = tuple([r'\[\*\*'])
-		suffixes_custom = tuple([r'\*\*\]'])
-		infixes_custom = tuple([r'\[\*\*', r'\*\*\]'])
+		punct = list(string.punctuation)
+		punct.remove('.')
+		punct.append('[**')
+		punct.append('**]')
+		punct = [re.escape(p) for p in punct]
+		
+		prefixes_custom = tuple(punct)
+		infixes_custom = tuple(punct)
+		suffixes_custom = tuple(punct)
+		
+		#prefixes_custom = tuple([r'\[\*\*', r'('])
+		#suffixes_custom = tuple([r'\*\*\]', r')'])
+		#infixes_custom = tuple([r'\[\*\*', r'\*\*\]', r'(', r')', r'>', r'<', r'->', r'-->', r'--->'])
 
 		exceptions_custom = {id : pattern for id, pattern in tokenizer_utils.generate_matcher_pattern1()}		
 		exceptions = update_exc(self.nlp.Defaults.tokenizer_exceptions, exceptions_custom)
 
 		prefix_re = compile_prefix_regex(self.nlp.Defaults.prefixes + prefixes_custom)
+		infix_re  = compile_infix_regex(infixes_custom + self.nlp.Defaults.infixes)
 		suffix_re = compile_suffix_regex(self.nlp.Defaults.suffixes + suffixes_custom)
-		infix_re  = compile_infix_regex(self.nlp.Defaults.infixes + infixes_custom)
-
+		
 		tokenizer = SpacyTokenizer(self.nlp.vocab, rules=exceptions,
 							prefix_search=prefix_re.search,
 							suffix_search=suffix_re.search,
@@ -38,37 +49,44 @@ class Tokenizer(object):
 		self.nlp.tokenizer = tokenizer
 
 		matcher = Matcher(self.nlp.vocab)
-		
-		def on_match_pattern2(matcher, doc, id, matches):
-			for match_id, start, end in matches:
-				string_id = self.nlp.vocab.strings[match_id]
-				n_tokens = end-start
-				if n_tokens == 4:
-					span1 = doc[start:start+2]
-					span2 = doc[start+2:end]
-					span1.merge()
-					span2.merge()
-				else:
-					if doc[start+1].text == '.':
-						span1 = doc[start:start+2]
-						span1.merge()
-					else:
-						span2 = doc[start+1:end]
-						span2.merge()
 						
-		def on_match_pattern3(matcher, doc, id, matches):
-			for match_id, start, end in matches:
-				#string_id = self.nlp.vocab.strings[match_id]
+		def on_match_pattern(matcher, doc, id, matches):
+		
+			match_id, start, end = matches[id]
+
+			if self.nlp.vocab.strings[match_id].startswith('p3'):
 				span = doc[start+1:end]
 				span.merge()
-		
+				for i in range(id, len(matches)):
+					matches[i] = (matches[i][0], matches[i][1] - 1,  matches[i][2] - 1)
+
+			elif self.nlp.vocab.strings[match_id].startswith('p2.1'):
+				span1 = doc[start:start+2]
+				span2 = doc[start+2:end]
+				span1.merge()
+				span2.merge()
+				for i in range(id, len(matches)):
+					matches[i] = (matches[i][0], matches[i][1] - 2,  matches[i][2] - 2)
+
+			elif self.nlp.vocab.strings[match_id].startswith('p2.2'):
+				span2 = doc[start+1:end]
+				span2.merge()
+				for i in range(id, len(matches)):
+					matches[i] = (matches[i][0], matches[i][1] - 1,  matches[i][2] - 1)
+
+			elif self.nlp.vocab.strings[match_id].startswith('p2.3'):
+				span1 = doc[start:start+2]
+				span1.merge()
+				for i in range(id, len(matches)):
+					matches[i] = (matches[i][0], matches[i][1] - 1,  matches[i][2] - 1)
+	
 		for id, pattern in tokenizer_utils.generate_matcher_pattern2():
-			matcher.add(id, on_match_pattern2, pattern)
+			matcher.add(id, on_match_pattern, pattern)
+			
 		for id, pattern in tokenizer_utils.generate_matcher_pattern3():
-			matcher.add(id, on_match_pattern3, pattern)
+			matcher.add(id, on_match_pattern, pattern)
 				
 		self.nlp.add_pipe(matcher, before='parser')
-		#self.nlp.add_pipe(tokenizer_utils.split_section_headers , before='parser')
 
 		print('done')
 
@@ -86,14 +104,7 @@ class Tokenizer(object):
 		documents = (tokenizer_utils.cleanup_report(doc) for doc in documents)
 		documents = (tokenizer_utils.merge_anon_tokens(doc) for doc in self.nlp.pipe(documents, n_threads=self.n_threads, batch_size=self.batch_size))
 
-		docs = [[[str.lower(tokenizer_utils.do_substitutions(word.text)).strip(' :-').replace(' ', '_') for word in sentence if not word.is_punct and not word.is_space] for sentence in doc.sents] for doc in documents]
-		
-		#for document in documents:
-		#	sentences = (sent.string.strip() for sent in document.sents)
-		#	sentences = tokenizer_utils.split_section_headers(sentences)
-		#	sentences = tokenizer_utils.delete_junk(list(sentences))
-		#	sentences = list(str.lower(word.text).strip(' :-').replace(' ', '_') for sentence in self.nlp_words.pipe(sentences, n_threads=self.n_threads) for word in sentence if not word.is_punct and not word.is_space)
-		#	docs.append(sentences)
+		docs = [[[token.lower() for token in [tokenizer_utils.do_substitutions(word.text) for word in sentence] if any(char.isalpha() for char in token) ] for sentence in doc.sents] for doc in documents]
 		
 		end = timer()
 		print('\tdone ({0:.2f}s)'.format(end-start))

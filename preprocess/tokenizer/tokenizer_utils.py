@@ -633,16 +633,16 @@ def generate_matcher_pattern2():
 		w1, w2 = [w.strip() for w in abbrev.split('.')][:2]
 		w1 = w1.lower()
 		w2 = w2.lower()
-		yield ('{}_{}_1'.format(w1, w2), [{LOWER: w1}, {ORTH: '.'}, {LOWER: w2}, {ORTH: '.'}])
-		yield ('{}_{}_2'.format(w1, w2), [{LOWER: w1 + '.'}, {LOWER: w2}, {ORTH: '.'}])
-		yield ('{}_{}_3'.format(w1, w2), [{LOWER: w1}, {ORTH: '.'}, {LOWER: w2 + '.'}])
+		yield ('p2.1_{}_{}'.format(w1, w2), [{LOWER: w1}, {ORTH: '.'}, {LOWER: w2}, {ORTH: '.'}])
+		yield ('P2.2_{}_{}'.format(w1, w2), [{LOWER: w1 + '.'}, {LOWER: w2}, {ORTH: '.'}])
+		yield ('p2.3_{}_{}'.format(w1, w2), [{LOWER: w1}, {ORTH: '.'}, {LOWER: w2 + '.'}])
 		
 def generate_matcher_pattern3():
 	for abbrev in abbrev_pattern3:
 		w1, w2 = [w.strip() for w in abbrev.split(' ')]
 		w1 = w1.lower()
 		w2 = w2.lower().strip('.')
-		yield ('{}_{}_1'.format(w1, w2), [{LOWER: w1}, {LOWER: w2}, {ORTH: '.'}])
+		yield ('p3_{}_{}'.format(w1, w2), [{LOWER: w1}, {LOWER: w2}, {ORTH: '.'}])
 
 ANONTOKEN = 'ANONTOKEN'
 FIRST_NAME_TOKEN = 'FIRSTNAMETOKEN'
@@ -682,7 +682,14 @@ PROVIDER_NUMBER_TOKEN = 'PROVIDERNUMBERTOKEN'
 
 # regex for locating a PHI [** ... **]
 
-str_anon_date = r'(?P<anon_date>([0-9/\-]+)|([0-9]+))'
+
+str_month_year = r'(?P<month_year>(?P<month__month_year>[0-9]{1,2})-/(?P<year__month_year>[0-9]{4}))'
+str_month_day = r'(?P<month_day>(?P<month__month_day>[0-9]{1,2})-(?P<day__month_day>[0-9]{1,2}))'
+str_year_month_day = r'(?P<year_month_day>(?P<year__year_month_day>[0-9]{4})-(?P<month__year_month_day>[0-9]{1,2})-(?P<day__year_month_day>[0-9]{1,2}))'
+str_year = r'(?P<year>[0-9]{4})'
+str_date = r'|'.join([str_month_year, str_month_day, str_year_month_day, str_year])
+str_anon_date = r'(?P<anon_date>(' + str_date + '))'
+#str_anon_date = r'(?P<anon_date>([0-9/\-]+)|([0-9]+))'
 str_anon_first_name = r'(?P<anon_first_name>(Known firstname)|(Female First Name)|(Male First Name)|(First Name))'
 str_anon_last_name = r'(?P<anon_last_name>(Known lastname)|(Last Name))'
 str_anon_doctor_first_name = r'(?P<anon_doctor_first_name>(Doctor First Name))'
@@ -729,6 +736,8 @@ str_anon_tokens = r'|'.join([str_anon_first_name, str_anon_last_name, str_anon_d
 										
 str_anon = r'(?P<anon>\[\*\*(({date})|(({tokens})(\(?[0-9]+\)?)?((\s?(\(.*?\)\s)?)|(\s))(?P<anon_id>[0-9]+)?))\*\*\])'.format(date=str_anon_date, tokens=str_anon_tokens)
 regex_anon = re.compile(str_anon)
+
+regex_anon_boundaries = re.compile(r'\[\*\*.*?\*\*\]')
 
 # start of a numbered section, such as a list, but with no whitespace
 # separating the numbers from the adjacent text
@@ -779,17 +788,30 @@ def generate_token(base_name, mo, mode):
 			return base_name
 			
 def merge_anon_tokens(doc):
-	matches = regex_anon.finditer(doc.text)
+	matches = regex_anon_boundaries.finditer(doc.text)
 	if matches == None:
 		return doc
 	for mo in matches:
-		if doc.merge(mo.start(), mo.end()) == None:
-			print(mo.string[mo.start():mo.end()])
+		doc.merge(mo.start(), mo.end())
 	return doc
+
+month_lookup = {1:'january',
+                2:'february',
+                3:'march',
+                4:'april',
+                5:'may',
+                6:'june',
+                7:'july',
+                8:'august',
+                9:'september',
+                10:'october',
+                11:'november',
+                12:'december',
+               }
 
 def do_substitutions(anon_token):
 
-	mode = 2
+	mode = 1
 	
 	def repl(mo):
 		
@@ -798,7 +820,14 @@ def do_substitutions(anon_token):
 		text = mo.string[mo.start():mo.end()]
 		
 		if mo.group('anon') and mo.group('anon_date'):
-			return mo.group('anon_date').replace('/', '').replace('-', '/')
+			if mo.group('month_year'):
+				return month_lookup[int(mo.group('month__month_year'))]
+			elif mo.group('month_day'):
+				return month_lookup[int(mo.group('month__month_day'))]
+			elif mo.group('year_month_day'):
+				return month_lookup[int(mo.group('month__year_month_day'))]
+			elif mo.group('year'):
+				return mo.group('year')
 		elif mo.group('anon') and mo.group('anon_first_name'):
 			return generate_token(FIRST_NAME_TOKEN, mo, mode)
 		elif mo.group('anon') and mo.group('anon_last_name'):
@@ -870,9 +899,9 @@ def do_substitutions(anon_token):
 		elif mo.group('anon'):
 			return generate_token(ANONTOKEN, mo, mode)
 
-	document = regex_anon.sub(repl, anon_token)
+	anon_token = regex_anon.sub(repl, anon_token)
 
-	return (document)
+	return anon_token
 
 def erase_spans(report, span_list):
 	"""
@@ -891,6 +920,9 @@ def erase_spans(report, span_list):
 		report = new_report
 
 	return report
+
+sub1_regex = re.compile(r'[-_*]{3,}')
+sub3_regex = re.compile(u'(\u2018|\u2019)')
 
 def cleanup_report(report):
 
@@ -934,13 +966,10 @@ def cleanup_report(report):
 	report = erase_spans(report, spans)
 		
 	# Remove long runs of dashes, underscores, or stars
-	report = re.sub(r'[-_*]{3,}', ' ', report)
-	
-	# collapse repeated whitespace (including newlines) into a single space
-	report = re.sub(r'\s+', ' ', report)
+	report = sub1_regex.sub(' ', report)
 
 	# convert unicode left and right quotation marks to ascii
-	report = re.sub(u'(\u2018|\u2019)', "'", report)
+	report = sub3_regex.sub("'", report)
 	
 	return report
 	
