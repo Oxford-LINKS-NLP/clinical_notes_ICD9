@@ -131,9 +131,10 @@ def train_epochs(args, model, optimizer, params, dicts):
     dataset_train = None
     dataset_dev = None
     del dataset_train, dataset_dev
-
-    model_best_sd = torch.load(os.path.join(model_dir, 'model_best_{}.pth'.format(args.criterion)))
-    model.load_state_dict(model_best_sd)
+    
+    if not test_only:
+        model_best_sd = torch.load(os.path.join(model_dir, 'model_best_{}.pth'.format(args.criterion)))
+        model.load_state_dict(model_best_sd)
     
     if args.gpu:
         model.cuda()
@@ -191,7 +192,7 @@ def train(model, optimizer, Y, epoch, batch_size, embed_desc, dataset, shuffle, 
         
     desc_data = desc
     if embed_desc and gpu:
-        desc_data = (desc_data[0].cuda(), desc_data[1], desc_data[2])
+        desc_data = desc_data.cuda()
     
     t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
     for batch_idx, tup in enumerate(t):
@@ -245,7 +246,7 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
 
     desc_data = desc
     if embed_desc and gpu:
-        desc_data = (desc_data[0].cuda(), desc_data[1], desc_data[2])
+        desc_data = desc_data.cuda()
 
     t = tqdm(gen, total=len(gen), ncols=0, file=sys.stdout)
     for batch_idx, tup in enumerate(t):
@@ -303,7 +304,7 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
         
         hids.extend(hadm_ids)
         docs.extend(data_text)
-        #attention.extend(alpha)
+        #attention.extend(alpha[:,codes_inds].cpu())
         
         t.set_postfix(loss=np.mean(losses))
         
