@@ -26,4 +26,4 @@ To train a new model run the following command
 
 To test a pre-trained model run the following command
 
-```python3 training.py /path/to/notes_labeled_train.ndjson /path/to/vocab.csv full hier_conv_attn 300,125,125,125 --filter-size 3 --dilation 1,2,4 --dropout 0.2,0.2,0.2 --n-epochs 200 --patience 10 --lr 0.0001 --criterion f1_micro_fine --batch-size 8 --max-len 5200 --embed-file /path/to/glove.840B.300d.txt --embed-desc --models-dir /path/to/saved_models --data-dir /path/to/mimicdata --test-model /path/to/model.pth
+```python3 training.py /path/to/notes_labeled_train.ndjson /path/to/vocab.csv full hier_conv_attn 300,125,125,125 --filter-size 3 --dilation 1,2,4 --dropout 0.2,0.2,0.2 --n-epochs 200 --patience 10 --lr 0.0001 --criterion f1_micro_fine --batch-size 8 --max-len 5200 --embed-file /path/to/glove.840B.300d.txt --embed-desc --models-dir /path/to/saved_models --data-dir /path/to/mimicdata --test-model /path/to/model.pth```
