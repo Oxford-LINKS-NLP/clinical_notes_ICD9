@@ -10,7 +10,10 @@ import torch
 
 import pandas as pd
 
-top_10_codes = ['401.9', '38.93', '428.0', '427.31', '414.01', '96.04', '96.6', '584.9', '250.00' ,'96.71']
+def get_codes():
+    return ['427.31', '584.9', '428.0', '401.9', '518.81',  '787.02', '785.4', '038.12', '501']
+
+#top_10_codes = ['401.9', '38.93', '428.0', '427.31', '414.01', '96.04', '96.6', '584.9', '250.00' ,'96.71']
 
 def save_metrics(dicts, metrics_hist, model_dir, metrics_codes=None, metrics_inst=None, hadm_ids=None, test_only=False):
     filename = "metrics.json" if not test_only else "metrics_test_only.json"
@@ -38,18 +41,35 @@ def save_params_dict(params):
     with open(os.path.join(params["model_dir"], "params.json"), 'w') as params_file:
         json.dump(params, params_file, indent=1)
 
-def write_docs_top_10(model_dir, fold, df, c2ind):
-    for code in top_10_codes:
+def write_docs_top_10(model_dir, fold, df, c2ind, desc_plain):
+
+    if not os.path.exists(os.path.join(model_dir, 'qualitative')):
+        os.makedirs(os.path.join(model_dir, 'qualitative'))
+    docs_dir = 'qualitative'
+    
+    for i, code in enumerate(get_codes()):
         ind = c2ind[code]
         
         docs_tp = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 1), axis=1)]
-        docs_tp.attention = docs_tp['attention'].apply(lambda a : a[ind])
-        n_samples = 5 if len(docs_tp)>=5 else len(docs_tp)
+        #docs_tp.attention = docs_tp['attention'].apply(lambda a : a[ind])
+        n_samples = 10 if len(docs_tp)>=10 else len(docs_tp)
         if n_samples > 0:
-            out_path = model_dir + '/docs_' + code + '_tp_' + fold + '.json'
-            with open(out_path, 'w') as f:
-                json.dump(json.loads(docs_tp.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
-                
+            docs_tp = docs_tp.sample(n=n_samples)[['id', 'text', 'attention']].reset_index()
+            docs_tp['attention'] = docs_tp['attention'].apply(lambda a : int(np.argmax(a[i])))
+            out_path = os.path.join(model_dir, docs_dir, code + '_tp.csv')
+            docs_tp[['text', 'attention']].apply(lambda row : ' '.join(row['text'][(row['attention']-7 if row['attention']-7 >= 0 else 0):row['attention']+8]), axis=1).to_csv(out_path, sep=' ', index=False, header=[desc_plain[ind]])
+            #out_path = model_dir + '/docs_' + code + '_tp_' + fold + '.json'
+            #with open(out_path, 'w') as f:
+            #    json.dump(json.loads(docs_tp.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
+        
+        docs_fn = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 0), axis=1)]
+        n_samples = 10 if len(docs_fn)>=10 else len(docs_fn)
+        if n_samples > 0:
+            docs_fn = docs_fn.sample(n=n_samples)[['id', 'text', 'attention']].reset_index()
+            docs_fn['attention'] = docs_fn['attention'].apply(lambda a : int(np.argmax(a[i])))
+            out_path = os.path.join(model_dir, docs_dir, code + '_fn.csv')
+            docs_fn[['text', 'attention']].apply(lambda row : ' '.join(row['text'][(row['attention']-7 if row['attention']-7 >= 0 else 0):row['attention']+8]), axis=1).to_csv(out_path, sep=' ', index=False, header=[desc_plain[ind]])
+
         #docs_tn = df[df.apply(lambda x: bool(x['target'][ind] == 0) & bool(x['prediction'][ind] == 0), axis=1)]
         #docs_tn['attention'] = docs_tn['attention'].apply(lambda a : a[ind])
         #n_samples = 5 if len(docs_tn)>=5 else len(docs_tn)
@@ -58,21 +78,21 @@ def write_docs_top_10(model_dir, fold, df, c2ind):
         #    with open(out_path, 'w') as f:
         #        json.dump(json.loads(docs_tn.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
         
-        docs_fp = df[df.apply(lambda x: bool(x['target'][ind] == 0) & bool(x['prediction'][ind] == 1), axis=1)]
-        docs_fp.attention = docs_fp['attention'].apply(lambda a : a[ind])
-        n_samples = 5 if len(docs_fp)>=5 else len(docs_fp)
-        if n_samples > 0:
-            out_path = model_dir + '/docs_' + code + '_fp_' + fold + '.json'
-            with open(out_path, 'w') as f:
-                json.dump(json.loads(docs_fp.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
+        #docs_fp = df[df.apply(lambda x: bool(x['target'][ind] == 0) & bool(x['prediction'][ind] == 1), axis=1)]
+        #docs_fp.attention = docs_fp['attention'].apply(lambda a : a[ind])
+        #n_samples = 5 if len(docs_fp)>=5 else len(docs_fp)
+        #if n_samples > 0:
+            #out_path = model_dir + '/docs_' + code + '_fp_' + fold + '.json'
+            #with open(out_path, 'w') as f:
+            #    json.dump(json.loads(docs_fp.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
         
-        docs_fn = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 0), axis=1)]
-        docs_fn.attention = docs_fn['attention'].apply(lambda a : a[ind])
-        n_samples = 5 if len(docs_fn)>=5 else len(docs_fn)
-        if n_samples > 0:
-            out_path = model_dir + '/docs_' + code + '_fn_' + fold + '.json'
-            with open(out_path, 'w') as f:
-                json.dump(json.loads(docs_fn.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
+        #docs_fn = df[df.apply(lambda x: bool(x['target'][ind] == 1) & bool(x['prediction'][ind] == 0), axis=1)]
+        #docs_fn.attention = docs_fn['attention'].apply(lambda a : a[ind])
+        #n_samples = 5 if len(docs_fn)>=5 else len(docs_fn)
+        #if n_samples > 0:
+        #    out_path = model_dir + '/docs_' + code + '_fn_' + fold + '.json'
+        #    with open(out_path, 'w') as f:
+        #        json.dump(json.loads(docs_fn.sample(n=n_samples)[['id', 'text', 'attention']].to_json(orient='records')), f, indent=1)
         
 def write_docs(model_dir, fold, df, lower, upper):
     assert upper >= lower
@@ -106,7 +126,7 @@ def write_docs(model_dir, fold, df, lower, upper):
         #   pad = int((len(doc_tp['attention'][j]) - len(doc_tp['text'][j]))/2)
         #   doc_tp.loc[[j],['attention']] = doc_tp['attention'][j][pad:-pad] if pad > 0 else doc_tp['attention'][j]
 
-        out_path = model_dir + '/doc_f1_' + str(int(lower*100)) + '_' + str(int(upper*100)) + '_' + str(i) + '_tp_' + fold + '.json'
+        out_path = os.path.join(model_dir, 'doc_f1_' + str(int(lower*100)) + '_' + str(int(upper*100)) + '_' + str(i) + '_tp_' + fold + '.json')
         with open(out_path, 'w') as f:
             json.dump(json.loads(doc_tp.to_json(orient='records')), f, indent=1)
             
@@ -148,7 +168,7 @@ def write_docs(model_dir, fold, df, lower, upper):
 
 def write_preds(hids, docs, attns, ys, yhats, yhats_raw, metrics, model_dir, fold, ind2c, c2ind, desc_plain):
         
-    preds_file = "%s/preds_%s.psv" % (model_dir, fold)
+    preds_file = os.path.join(model_dir, 'preds_{}.psv'.format(fold))
     with open(preds_file, 'w') as f:
         w = csv.writer(f, delimiter='|')
         for yhat, hid in zip(yhats, hids):
@@ -158,7 +178,7 @@ def write_preds(hids, docs, attns, ys, yhats, yhats_raw, metrics, model_dir, fol
             else:
                 w.writerow([hid] + list(codes))
                 
-    preds_file_target = "%s/preds_%s_target.psv" % (model_dir, fold)
+    preds_file_target = os.path.join(model_dir, 'preds_{}_target.psv'.format(fold))
     with open(preds_file_target, 'w') as f:
         w = csv.writer(f, delimiter='|')
         for y, hid in zip(ys, hids):
@@ -168,28 +188,23 @@ def write_preds(hids, docs, attns, ys, yhats, yhats_raw, metrics, model_dir, fol
             else:
                 w.writerow([hid] + list(codes))
                 
-    labels = {str(k):{'name':'{} {}'.format(ind2c[k], v) } for k, v in enumerate(desc_plain)}
-    with open(model_dir + '/labels.json', 'w') as f:
-        json.dump(labels, f, indent=1)
+    #labels = {str(k):{'name':'{} {}'.format(ind2c[k], v) } for k, v in enumerate(desc_plain)}
+    #with open(model_dir + '/labels.json', 'w') as f:
+    #    json.dump(labels, f, indent=1)
     
     metrics_df = pd.DataFrame(data={'id':hids, 'accuracy':metrics[0], 'precision':metrics[1], 'recall':metrics[2], 'f1':metrics[3]})
-    #docs_df = pd.DataFrame(data={'id':hids, 'text':docs, 'attention': attns, 'target':ys, 'prediction':yhats})
-    docs_df = pd.DataFrame()
-    docs_df['id'] = hids
-    docs_df['text'] = docs
-    docs_df['target'] = [y for y in ys]
-    docs_df['prediction'] = [yhat for yhat in yhats]
-    docs_df['attention'] = attns
+
+    docs_df = pd.DataFrame(data={'id':hids, 'text':docs, 'attention':attns, 'target':list(ys), 'prediction':list(yhats)})
     
-    merged_df = docs_df.merge(metrics_df, on='id', how='inner')
+    docs_df = docs_df.merge(metrics_df, on='id', how='inner')
     
-    write_docs_top_10(model_dir, fold, merged_df, c2ind)
+    write_docs_top_10(model_dir, fold, docs_df, c2ind, desc_plain)
     
-    write_docs(model_dir, fold, merged_df, 0.9, 1.0)
-    write_docs(model_dir, fold, merged_df, 0.7, 0.8)
-    write_docs(model_dir, fold, merged_df, 0.5, 0.6)
-    write_docs(model_dir, fold, merged_df, 0.3, 0.4)
-    write_docs(model_dir, fold, merged_df, 0.1, 0.2)
+    #write_docs(model_dir, fold, merged_df, 0.9, 1.0)
+    #write_docs(model_dir, fold, merged_df, 0.7, 0.8)
+    #write_docs(model_dir, fold, merged_df, 0.5, 0.6)
+    #write_docs(model_dir, fold, merged_df, 0.3, 0.4)
+    #write_docs(model_dir, fold, merged_df, 0.1, 0.2)
     
     #output = []
     #for hid, doc, attn in zip(hids, docs, attns):

@@ -304,10 +304,10 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
         
         hids.extend(hadm_ids)
         docs.extend(data_text)
-        #attention.extend(alpha[:,codes_inds].cpu())
+        attention.extend(alpha[:,[dicts['c2ind'][c] for c in persistence.get_codes()]].cpu())
         
         t.set_postfix(loss=np.mean(losses))
-        
+    
     level = ''
     k = 5 if len(ind2c) == 50 else [8,15]
 
@@ -328,8 +328,8 @@ def test(model, Y, epoch, dataset, batch_size, embed_desc, fold, gpu, dicts, mod
     metrics.update(metrics_coarse)
 
     #write the predictions
-    #if fold == 'test':
-    #    persistence.write_preds(hids, docs, attention, y, yhat, yhat_raw, metrics_inst, model_dir, fold, ind2c, c2ind, dicts['desc_plain'])
+    if fold == 'test':
+        persistence.write_preds(hids, docs, attention, y, yhat, yhat_raw, metrics_inst, model_dir, fold, ind2c, c2ind, dicts['desc_plain'])
     
     return metrics, metrics_codes, metrics_inst, hids
     
