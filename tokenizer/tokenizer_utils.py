@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import re2 as re
+import re
 import hashlib
 from spacy.attrs import ORTH
 from spacy.attrs import LOWER
