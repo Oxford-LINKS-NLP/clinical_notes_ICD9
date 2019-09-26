@@ -1,0 +1,5 @@
+.ipynb_checkpoints/*
+saved_models/*
+pip-selfcheck.json
+mimicdata/*
+__pycache__/*
